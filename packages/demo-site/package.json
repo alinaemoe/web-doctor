@@ -1,0 +1,20 @@
+{
+  "name": "@webdoctor/demo-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Broken Shop: a demo site with intentional defects (broken mode) and their fixes (fixed mode).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./expected": "./src/expected.ts"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "gen:expected": "tsx scripts/write-expected.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@webdoctor/core": "workspace:*"
+  }
+}
