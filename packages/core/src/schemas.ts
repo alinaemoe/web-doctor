@@ -163,6 +163,19 @@ export const RunSchema = z.object({
   finishedAt: z.string().datetime().optional(),
   /** True when the run was canceled or hit a limit before finishing. */
   partial: z.boolean(),
+  stopReason: z.enum(["canceled", "timeout", "max-pages"]).optional(),
+});
+
+/** Per-page summary kept with a run (for the page list, screenshots, Verify Fix). */
+export const PageSummarySchema = z.object({
+  url: z.string(),
+  finalUrl: z.string(),
+  status: z.number().int(),
+  depth: z.number().int().nonnegative(),
+  viewport: z.enum(["desktop", "mobile"]),
+  title: z.string().nullable(),
+  screenshotKey: z.string().optional(),
+  screenshotTruncated: z.boolean(),
 });
 
 export const IssueGroupSchema = z.object({
@@ -182,6 +195,7 @@ export const IssueGroupSchema = z.object({
 export const ReportSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   run: RunSchema,
+  pages: z.array(PageSummarySchema),
   issues: z.array(IssueSchema),
   groups: z.array(IssueGroupSchema),
 });

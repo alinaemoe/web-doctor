@@ -1,0 +1,24 @@
+{
+  "name": "@webdoctor/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "webdoctor command line interface.",
+  "bin": {
+    "webdoctor": "./src/main.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@webdoctor/core": "workspace:*",
+    "@webdoctor/rules": "workspace:*",
+    "@webdoctor/scanner": "workspace:*",
+    "@webdoctor/storage": "workspace:*",
+    "cac": "^7.1.0"
+  },
+  "devDependencies": {
+    "@webdoctor/demo-site": "workspace:*"
+  }
+}

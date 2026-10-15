@@ -1,0 +1,17 @@
+{
+  "name": "@webdoctor/rules",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Diagnostic rules, explanation templates and root-cause grouping.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@webdoctor/core": "workspace:*"
+  }
+}

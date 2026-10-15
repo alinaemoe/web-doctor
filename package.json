@@ -16,7 +16,8 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
-    "demo": "pnpm --filter @webdoctor/demo-site start"
+    "demo": "pnpm --filter @webdoctor/demo-site start",
+    "webdoctor": "tsx apps/cli/src/main.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

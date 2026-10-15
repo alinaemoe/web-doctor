@@ -8,6 +8,7 @@ import type {
   IssueGroupSchema,
   IssueSchema,
   NodeSignatureSchema,
+  PageSummarySchema,
   ReportSchema,
   RunSchema,
   RunSettingsSchema,
@@ -37,4 +38,5 @@ export type RunStatus = z.infer<typeof RunStatusSchema>;
 export type RunSettings = z.infer<typeof RunSettingsSchema>;
 export type Run = z.infer<typeof RunSchema>;
 export type IssueGroup = z.infer<typeof IssueGroupSchema>;
+export type PageSummary = z.infer<typeof PageSummarySchema>;
 export type Report = z.infer<typeof ReportSchema>;
