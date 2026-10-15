@@ -1,5 +1,9 @@
 #!/usr/bin/env tsx
+import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { cac } from "cac";
+import { createApiServer } from "@webdoctor/api";
 import type { Category, ScanViewport, Severity } from "@webdoctor/core";
 import { ALL_CATEGORIES, SEVERITY_RANK, runScan } from "./runScan";
 import type { ReportFormat } from "./runScan";
@@ -113,6 +117,38 @@ cli
       process.exit(EXIT.issues);
     }
     process.exit(report.run.partial ? EXIT.partial : EXIT.ok);
+  });
+
+cli
+  .command("ui", "Serve the local inspector for scan results (listens on 127.0.0.1 only)")
+  .option("--dir <dir>", "Directory with scan results (the --out of scan)", {
+    default: ".webdoctor",
+  })
+  .option("--port <n>", "Port", { default: 7777 })
+  .option("--token <token>", "Access token (random by default)")
+  .action(async (flags: Record<string, unknown>) => {
+    const port = Number(flags.port);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) fail("--port must be 0-65535");
+    const token =
+      typeof flags.token === "string" && flags.token
+        ? flags.token
+        : randomBytes(16).toString("hex");
+    const webDir = fileURLToPath(new URL("../../web/dist", import.meta.url));
+
+    const app = await createApiServer({ dataDir: String(flags.dir), token, webDir });
+    try {
+      await app.listen({ host: "127.0.0.1", port });
+    } catch (error) {
+      fail(`cannot listen on 127.0.0.1:${port}: ${(error as Error).message}`);
+    }
+    const address = app.server.address();
+    const actual = typeof address === "object" && address ? address.port : port;
+    if (!existsSync(webDir)) {
+      console.error("note: the UI is not built yet. Run: pnpm --filter @webdoctor/web build");
+    }
+    console.log(`Web Doctor inspector: http://127.0.0.1:${actual}/?token=${token}`);
+    console.log("Press Ctrl+C to stop.");
+    process.once("SIGINT", () => void app.close().then(() => process.exit(0)));
   });
 
 cli.help();

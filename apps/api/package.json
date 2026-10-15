@@ -1,0 +1,20 @@
+{
+  "name": "@webdoctor/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local HTTP API and static host for the Web Doctor UI.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.6",
+    "@webdoctor/core": "workspace:*",
+    "@webdoctor/storage": "workspace:*",
+    "fastify": "^5.12.7"
+  }
+}

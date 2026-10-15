@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { ReportSchema, SCHEMA_VERSION } from "@webdoctor/core";
 import type { Issue, IssueGroup, PageSummary, Report, Run } from "@webdoctor/core";
 import { migrate } from "./migrate";
@@ -16,6 +16,10 @@ export interface RunListItem {
   status: string;
   startedAt: string;
   partial: boolean;
+  /** Issues with verdict "fail". */
+  failCount: number;
+  /** Issues that could not be verified. */
+  unverifiedCount: number;
 }
 
 export interface Store {
@@ -184,8 +188,24 @@ export function openStore(path: string): Store {
   return {
     saveReport,
     getReport,
-    listRuns: () =>
-      db
+    listRuns: () => {
+      const counts = new Map<string, { fail: number; unverified: number }>();
+      const rows = db
+        .select({
+          runId: issues.runId,
+          verdict: issues.verdict,
+          n: sql<number>`count(*)`,
+        })
+        .from(issues)
+        .groupBy(issues.runId, issues.verdict)
+        .all();
+      for (const r of rows) {
+        const c = counts.get(r.runId) ?? { fail: 0, unverified: 0 };
+        if (r.verdict === "fail") c.fail = r.n;
+        else c.unverified += r.n;
+        counts.set(r.runId, c);
+      }
+      return db
         .select({
           id: runs.id,
           startUrl: runs.startUrl,
@@ -195,7 +215,13 @@ export function openStore(path: string): Store {
         })
         .from(runs)
         .orderBy(desc(runs.startedAt))
-        .all(),
+        .all()
+        .map((r) => ({
+          ...r,
+          failCount: counts.get(r.id)?.fail ?? 0,
+          unverifiedCount: counts.get(r.id)?.unverified ?? 0,
+        }));
+    },
     close: () => sqlite.close(),
   };
 }

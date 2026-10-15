@@ -101,6 +101,7 @@ describe("openStore", () => {
 
     expect(store.getReport("r1")?.issues).toHaveLength(1);
     expect(store.listRuns().map((r) => r.id)).toEqual(["r2", "r1"]);
+    expect(store.listRuns()[0]).toMatchObject({ failCount: 3, unverifiedCount: 0 });
     store.close();
   });
 

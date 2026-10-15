@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@webdoctor/api": "workspace:*",
     "@webdoctor/core": "workspace:*",
     "@webdoctor/rules": "workspace:*",
     "@webdoctor/scanner": "workspace:*",

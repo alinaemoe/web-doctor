@@ -3,8 +3,8 @@
 A visual debugging workspace for websites: find a problem, see it on the real page, understand it,
 fix it, **re-verify** it, and track it over time. See [TZ.md](TZ.md) for the full specification.
 
-> Status: **M1 — audit MVP (CLI).** Scanner, rules, SQLite storage and reports work from the command line.
-> The visual inspector (M2), Verify Fix (M3) and run history (M4) are next.
+> Status: **M2 — visual inspector.** CLI scan plus a local web inspector (3 panels, highlights on the
+> screenshot, filters, issue details). Verify Fix (M3) and run history (M4) are next.
 
 ## Layout
 
@@ -16,8 +16,6 @@ fix it, **re-verify** it, and track it over time. See [TZ.md](TZ.md) for the ful
 | `packages/storage`   | Drizzle schema + SQLite store (`better-sqlite3`), hand-written migrations    |
 | `packages/demo-site` | **Broken Shop**: demo site with intentional defects + `expected-issues.json` |
 | `apps/cli`           | `webdoctor scan`, JSON / CSV / HTML reports                                  |
-
-Planned (see TZ section 8): `apps/api`, `apps/web`.
 
 ## Develop
 
@@ -41,7 +39,19 @@ Results go to `.webdoctor/`: `webdoctor.db` (SQLite) and `runs/<runId>/` with `r
 Exit codes: `0` ok, `1` issues at/above `--fail-on`, `2` usage error, `3` partial result.
 Options: `--max-pages --depth --viewport --categories --format --out --timeout --ignore-robots --ci`.
 
-Not in M1 yet: sitemap-based discovery, interactive DOM snapshots, page states, Lighthouse.
+## Inspect the results
+
+```bash
+pnpm --filter @webdoctor/web build      # once (and after UI changes)
+pnpm webdoctor ui                       # prints http://127.0.0.1:7777/?token=...
+```
+
+The API listens on `127.0.0.1` only, requires the printed access token and rejects non-loopback
+`Host` headers. Keys: `j`/`k` move through issues, `1`/`2` switch Desktop/Mobile, `/` searches.
+For UI development: `pnpm webdoctor ui --token dev` and `pnpm --filter @webdoctor/web dev`, then open
+`http://localhost:5173/?token=dev`.
+
+Not in M1/M2 yet: sitemap-based discovery, interactive DOM snapshots, page states, Lighthouse.
 
 ## Broken Shop
 
