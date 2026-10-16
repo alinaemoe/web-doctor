@@ -25,13 +25,28 @@ interface Props {
 export function Viewer(props: Props) {
   const { model, runId, pageUrl, viewport, pageIssues, selectedIssueId, hoverIssueId } = props;
   const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
+  const [zoom, setZoom] = useState<"fit" | "actual">("fit");
+  const [shownWidth, setShownWidth] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const page = pageUrl ? findPage(model, pageUrl, viewport) : undefined;
   const shotKey = page?.screenshotKey;
   const selected = pageIssues.find((i) => i.id === selectedIssueId);
 
   // A new screenshot has an unknown size until it loads.
   useEffect(() => setNatural(null), [shotKey, runId]);
+
+  // Track the on-screen width so we can say how much the screenshot is scaled down.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img || !natural) return;
+    const measure = () => setShownWidth(img.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(img);
+    return () => observer.disconnect();
+  }, [natural, zoom, shotKey]);
 
   // Bring the selected highlight into view.
   useEffect(() => {
@@ -89,6 +104,27 @@ export function Viewer(props: Props) {
         </div>
       </div>
 
+      {natural && (
+        <div className="viewer-sub">
+          <span className="muted small">
+            {natural.width} × {natural.height} px
+            {shownWidth > 0 && ` · shown at ${Math.round((shownWidth / natural.width) * 100)}%`}
+          </span>
+          <div className="seg seg-small" role="group" aria-label="Zoom">
+            <button type="button" aria-pressed={zoom === "fit"} onClick={() => setZoom("fit")}>
+              {t.fit}
+            </button>
+            <button
+              type="button"
+              aria-pressed={zoom === "actual"}
+              onClick={() => setZoom("actual")}
+            >
+              {t.actualSize}
+            </button>
+          </div>
+        </div>
+      )}
+
       {onlyOther && <p className="notice">{t.viewportOnlyOther(onlyOther)}</p>}
       {page?.screenshotTruncated && <p className="notice">{t.truncated}</p>}
       {selected && natural && !selectedHasBox && !onlyOther && (
@@ -99,8 +135,14 @@ export function Viewer(props: Props) {
         {!shotKey ? (
           <p className="empty">{t.noScreenshot}</p>
         ) : (
-          <div className="shot" data-viewport={viewport}>
+          <div
+            className="shot"
+            data-viewport={viewport}
+            data-zoom={zoom}
+            style={zoom === "actual" && natural ? { width: natural.width } : undefined}
+          >
             <img
+              ref={imgRef}
               src={artifactUrl(runId, shotKey)}
               alt={`Screenshot of ${pathOf(page!.url)} (${viewport})`}
               onLoad={(e) =>

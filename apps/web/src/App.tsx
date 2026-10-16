@@ -103,7 +103,7 @@ export function App() {
           </a>
         )}
         <span className="spacer" />
-        <span className="muted small kbd-hint">j/k move · 1/2 viewport · / search</span>
+        <span className="muted small kbd-hint">j / k — next / previous issue</span>
         <button type="button" className="btn" onClick={cycle} aria-label={`${t.theme}: ${theme}`}>
           {t.theme}: {theme}
         </button>

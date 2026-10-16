@@ -66,9 +66,11 @@ export function Inspector({ report, initialIssueId, onIssueChange }: Props) {
     () => buildList(filtered, model, filters.grouped),
     [filtered, model, filters.grouped],
   );
-  const total = model.issues.filter(
-    (i) => filters.verdict === "all" || i.verdict === filters.verdict,
-  ).length;
+
+  const counts = {
+    fail: model.issues.filter((i) => i.verdict === "fail").length,
+    unverified: model.issues.filter((i) => i.verdict === "unverified").length,
+  };
 
   // Keep the selection valid when filters remove the selected row.
   const selectedItem: ListItem | undefined =
@@ -112,8 +114,7 @@ export function Inspector({ report, initialIssueId, onIssueChange }: Props) {
         const next =
           items[Math.min(items.length - 1, Math.max(0, index + (e.key === "j" ? 1 : -1)))];
         if (next) setSel({ key: next.key });
-      } else if (e.key === "1") setViewport("desktop");
-      else if (e.key === "2") setViewport("mobile");
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -126,9 +127,9 @@ export function Inspector({ report, initialIssueId, onIssueChange }: Props) {
           filters={filters}
           onChange={setFilters}
           pageUrls={model.pageUrls}
-          shown={filtered.length}
-          total={total}
+          shown={items.length}
           searchRef={searchRef}
+          counts={counts}
         />
         <IssueList
           items={items}

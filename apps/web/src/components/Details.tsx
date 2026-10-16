@@ -5,6 +5,23 @@ import type { Model } from "../lib/model";
 import { t, unverifiedReasons } from "../lib/strings";
 import type { ListItem } from "../lib/filters";
 
+const CATEGORY_LABEL: Record<string, string> = {
+  "links-resources": "Links & resources",
+  accessibility: "Accessibility",
+  seo: "SEO",
+  runtime: "Runtime",
+  performance: "Performance",
+};
+
+const EVIDENCE_LABEL: Record<Evidence["type"], string> = {
+  dom: "page element",
+  network: "network request",
+  console: "console message",
+  metric: "measurement",
+  headers: "header",
+  screenshot: "screenshot",
+};
+
 function useCopy() {
   const [done, setDone] = useState<string | null>(null);
   const copy = async (id: string, text: string) => {
@@ -24,7 +41,7 @@ function EvidenceView({ e }: { e: Evidence }) {
     case "dom":
       return (
         <>
-          <p className="ev-title">DOM element</p>
+          <p className="ev-title">Page element</p>
           <code className="inline">{e.selector}</code>
           <pre>{e.htmlSnippet}</pre>
         </>
@@ -32,7 +49,7 @@ function EvidenceView({ e }: { e: Evidence }) {
     case "network":
       return (
         <>
-          <p className="ev-title">Network</p>
+          <p className="ev-title">Network request</p>
           <pre>
             {[
               `${e.method} ${e.requestUrl}`,
@@ -72,25 +89,60 @@ function EvidenceView({ e }: { e: Evidence }) {
   }
 }
 
+function FixCard({
+  howToFix,
+  docsUrl,
+  example,
+  verify,
+}: {
+  howToFix: string;
+  docsUrl?: string;
+  example?: string;
+  verify?: string;
+}) {
+  return (
+    <section className="fix-card" aria-label={t.fixLabel}>
+      <h3>{t.fixLabel}</h3>
+      <p>
+        {howToFix}
+        {docsUrl && (
+          <>
+            {" "}
+            <a href={docsUrl} target="_blank" rel="noopener noreferrer">
+              Documentation
+            </a>
+          </>
+        )}
+      </p>
+      {example && <pre>{example}</pre>}
+      {verify && (
+        <p className="muted small">
+          <strong>{t.verifyLabel}:</strong> {verify}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function IssueDetails({ issue, model }: { issue: Issue; model: Model }) {
   const { done, copy } = useCopy();
   const p = priorityOf(issue, model);
   const dom = issue.evidence.find((e) => e.type === "dom");
   const x = issue.explanation;
+  const kinds = [...new Set(issue.evidence.map((e) => EVIDENCE_LABEL[e.type]))].join(", ");
 
   return (
     <article className="details" aria-label="Issue details">
       <header>
         <div className="badges">
-          <span className={`pill sev-${issue.severity}`}>{issue.severity}</span>
-          <span className="pill">{issue.category}</span>
-          <span className="pill">{Math.round(issue.confidence * 100)}% confidence</span>
-          <span className="pill">{issue.viewport}</span>
+          <span className={`pill pill-sev sev-${issue.severity}`}>{issue.severity}</span>
+          <span className="pill">{CATEGORY_LABEL[issue.category] ?? issue.category}</span>
+          {issue.viewport !== "all" && <span className="pill">{issue.viewport} only</span>}
+          <span className="pill">{Math.round(issue.confidence * 100)}% sure</span>
         </div>
         <h2>{issue.title}</h2>
-        <p className="muted mono">
-          {issue.ruleId} · {pathOf(issue.pageUrl)}
-        </p>
+        <p className="lead">{x.what}</p>
+        <p className="where mono">{x.where}</p>
       </header>
 
       {issue.verdict === "unverified" && (
@@ -100,42 +152,18 @@ export function IssueDetails({ issue, model }: { issue: Issue; model: Model }) {
         </p>
       )}
 
-      <dl className="explain">
-        <dt>{t.whatLabel}</dt>
-        <dd>{x.what}</dd>
-        <dt>{t.whereLabel}</dt>
-        <dd>{x.where}</dd>
-        <dt>{t.whyLabel}</dt>
-        <dd>{x.why}</dd>
-        <dt>{t.fixLabel}</dt>
-        <dd>
-          {x.howToFix}
-          {issue.fix?.docsUrl && (
-            <>
-              {" "}
-              <a href={issue.fix.docsUrl} target="_blank" rel="noopener noreferrer">
-                Documentation
-              </a>
-            </>
-          )}
-        </dd>
-        {issue.fix?.after && (
-          <>
-            <dt>{t.exampleLabel}</dt>
-            <dd>
-              <pre>{issue.fix.after}</pre>
-            </dd>
-          </>
-        )}
-        {issue.fix?.verifyCriterion && (
-          <>
-            <dt>{t.verifyLabel}</dt>
-            <dd>{issue.fix.verifyCriterion}</dd>
-          </>
-        )}
-      </dl>
+      <FixCard
+        howToFix={x.howToFix}
+        docsUrl={issue.fix?.docsUrl}
+        example={issue.fix?.after}
+        verify={issue.fix?.verifyCriterion}
+      />
 
-      {issue.category === "accessibility" && <p className="muted small">{t.a11yNote}</p>}
+      <section>
+        <h3>{t.whyLabel}</h3>
+        <p>{x.why}</p>
+        {issue.category === "accessibility" && <p className="muted small">{t.a11yNote}</p>}
+      </section>
 
       <div className="actions">
         {dom && (
@@ -152,16 +180,18 @@ export function IssueDetails({ issue, model }: { issue: Issue; model: Model }) {
         </button>
       </div>
 
-      <h3>
-        {t.evidence} ({issue.evidence.length})
-      </h3>
-      {issue.evidence.map((e, i) => (
-        <div className="evidence" key={i}>
-          <EvidenceView e={e} />
-        </div>
-      ))}
+      <details className="fold" open={issue.evidence.length <= 2}>
+        <summary>
+          {t.evidence} ({issue.evidence.length}) — {kinds}
+        </summary>
+        {issue.evidence.map((e, i) => (
+          <div className="evidence" key={i}>
+            <EvidenceView e={e} />
+          </div>
+        ))}
+      </details>
 
-      <details className="why-priority">
+      <details className="fold why-priority">
         <summary>{t.priority}</summary>
         <p className="mono small">
           {p.severityWeight} (severity) × {p.confidence} (confidence) ×{" "}
@@ -173,9 +203,15 @@ export function IssueDetails({ issue, model }: { issue: Issue; model: Model }) {
   );
 }
 
+const SIGNATURE_LABEL: Record<string, string> = {
+  net: "Shared request",
+  dom: "Shared element",
+  console: "Shared message",
+  metric: "Shared measurement",
+};
+
 export function GroupDetails({
   item,
-  model,
   onSelectIssue,
 }: {
   item: Extract<ListItem, { kind: "group" }>;
@@ -185,50 +221,61 @@ export function GroupDetails({
   const rep = item.representative;
   const byPage = new Map<string, Issue>();
   for (const m of item.members) if (!byPage.has(m.pageUrl)) byPage.set(m.pageUrl, m);
+  const [, kind = "", ...rest] = item.group.signature.split("|");
+  const common = rest.join("|");
 
   return (
     <article className="details" aria-label="Group details">
       <header>
         <div className="badges">
-          <span className={`pill sev-${rep.severity}`}>{rep.severity}</span>
+          <span className={`pill pill-sev sev-${rep.severity}`}>{rep.severity}</span>
           <span className="pill">{t.rootCause}</span>
           <span className="pill">
             {t.hypothesis} · {Math.round(item.group.confidence * 100)}%
           </span>
         </div>
-        <h2>
-          {rep.title} — {item.pages} pages
-        </h2>
-        <p className="muted mono">{item.group.ruleId}</p>
+        <h2>{rep.title}</h2>
+        <p className="lead">
+          Found on {byPage.size} pages ({item.members.length} times in total).
+        </p>
+        <p>
+          It most likely comes from one shared place, such as a template, a component or a file.
+          This is a hypothesis: fix one page and re-check before assuming the others are fixed.
+        </p>
+        {common && (
+          <p className="where mono">
+            {SIGNATURE_LABEL[kind] ?? "Shared signature"}: {common}
+          </p>
+        )}
       </header>
 
-      <p>
-        {item.members.length} occurrences share the same signature, so one shared cause (a template,
-        a component or a resource) is likely. This is a hypothesis: fix one page and re-check before
-        assuming the others are fixed.
-      </p>
-      <p className="mono small">{item.group.signature.split("|").slice(2).join("|")}</p>
+      <FixCard
+        howToFix={rep.explanation.howToFix}
+        docsUrl={rep.fix?.docsUrl}
+        verify={rep.fix?.verifyCriterion}
+      />
 
-      <dl className="explain">
-        <dt>{t.whyLabel}</dt>
-        <dd>{rep.explanation.why}</dd>
-        <dt>{t.fixLabel}</dt>
-        <dd>{rep.explanation.howToFix}</dd>
-      </dl>
+      <section>
+        <h3>{t.whyLabel}</h3>
+        <p>{rep.explanation.why}</p>
+      </section>
 
-      <h3>
-        {t.affectedPages} ({byPage.size})
-      </h3>
-      <ul className="page-list">
-        {[...byPage.entries()].map(([url, issue]) => (
-          <li key={url}>
-            <button type="button" className="link-btn" onClick={() => onSelectIssue(issue.id)}>
-              {pathOf(url)}
-            </button>
-          </li>
-        ))}
-      </ul>
-      <p className="muted small">Total scanned pages: {model.pageUrls.length}</p>
+      <section>
+        <h3>
+          {t.affectedPages} ({byPage.size})
+        </h3>
+        <p className="muted small">{t.clickPage}</p>
+        <ul className="page-list">
+          {[...byPage.entries()].map(([url, issue]) => (
+            <li key={url}>
+              <button type="button" onClick={() => onSelectIssue(issue.id)}>
+                <span>{pathOf(url)}</span>
+                <span aria-hidden="true">→</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
     </article>
   );
 }

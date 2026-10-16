@@ -14,7 +14,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 14px/1.5 var(--font-ui);
+  font: 15px/1.55 var(--font-ui);
 }
 
 a {
@@ -39,7 +39,7 @@ a {
   color: var(--muted);
 }
 .small {
-  font-size: 12px;
+  font-size: 13px;
 }
 .mono {
   font-family: var(--font-mono);
@@ -236,14 +236,14 @@ a {
   background: transparent;
   border: 0;
   border-bottom: 1px solid var(--line);
-  border-left: 3px solid transparent;
+  border-left: 4px solid transparent;
   cursor: pointer;
 }
 .row:hover {
   background: var(--bg-hover);
 }
 .row[data-selected="true"] {
-  background: var(--bg-elev);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
   border-left-color: var(--accent);
 }
 .row-main {
@@ -257,7 +257,7 @@ a {
 }
 .row-meta {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 .sev-badge {
@@ -496,4 +496,218 @@ code.inline {
   * {
     scroll-behavior: auto !important;
   }
+}
+
+/* ---- readability pass ---- */
+.panel-list {
+  border-right-color: var(--line-strong);
+}
+.panel-details {
+  border-left-color: var(--line-strong);
+}
+.input,
+.btn,
+.chip,
+.seg button {
+  border-color: var(--line-strong);
+}
+
+/* result tabs: the main way to switch between failing and "couldn't verify" */
+.tabs {
+  display: flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.tabs button {
+  flex: 1;
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 0;
+  border-right: 1px solid var(--line-strong);
+  cursor: pointer;
+}
+.tabs button:last-child {
+  border-right: 0;
+}
+.tabs button[aria-pressed="true"] {
+  background: var(--fg);
+  color: var(--bg);
+  font-weight: 600;
+}
+.tabs .count {
+  margin-left: 6px;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+/* filled severity badges: readable in both themes */
+.sev-badge,
+.pill.pill-sev {
+  border-color: transparent;
+}
+.sev-badge.sev-critical,
+.pill-sev.sev-critical {
+  background: var(--sev-critical);
+}
+.sev-badge.sev-high,
+.pill-sev.sev-high {
+  background: var(--sev-high);
+}
+.sev-badge.sev-medium,
+.pill-sev.sev-medium {
+  background: var(--sev-medium);
+}
+.sev-badge.sev-low,
+.pill-sev.sev-low {
+  background: var(--sev-low);
+}
+.sev-badge.sev-info,
+.pill-sev.sev-info {
+  background: var(--sev-info);
+}
+.sev-badge,
+.pill.pill-sev {
+  color: var(--on-sev);
+}
+.chip.sev-critical,
+.chip.sev-high,
+.chip.sev-medium,
+.chip.sev-low,
+.chip.sev-info {
+  font-weight: 600;
+}
+.chip[aria-pressed="true"].sev-critical {
+  background: var(--sev-critical);
+  border-color: var(--sev-critical);
+  color: var(--on-sev);
+}
+.chip[aria-pressed="true"].sev-high {
+  background: var(--sev-high);
+  border-color: var(--sev-high);
+  color: var(--on-sev);
+}
+.chip[aria-pressed="true"].sev-medium {
+  background: var(--sev-medium);
+  border-color: var(--sev-medium);
+  color: var(--on-sev);
+}
+.chip[aria-pressed="true"].sev-low {
+  background: var(--sev-low);
+  border-color: var(--sev-low);
+  color: var(--on-sev);
+}
+.chip[aria-pressed="true"].sev-info {
+  background: var(--sev-info);
+  border-color: var(--sev-info);
+  color: var(--on-sev);
+}
+.pill {
+  font-size: 13px;
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+
+/* viewer */
+.viewer-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.seg-small button {
+  padding: 2px 10px;
+  font-size: 13px;
+}
+.shot[data-zoom="actual"] {
+  max-width: none;
+  margin: 0;
+}
+.shot[data-zoom="actual"] img {
+  width: 100%;
+}
+
+/* details: lead sentence, fix card, folds */
+.details h2 {
+  font-size: 20px;
+  line-height: 1.3;
+}
+.details h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.details section {
+  margin: 16px 0;
+}
+.lead {
+  margin: 6px 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.where.mono {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.fix-card {
+  border: 1px solid var(--line-strong);
+  border-left: 5px solid var(--accent);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  padding: 10px 14px;
+}
+.fix-card p {
+  margin: 0 0 6px;
+}
+.fold {
+  margin: 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+.fold > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.why-priority {
+  margin-top: 8px;
+}
+
+/* group page list: one clear column of buttons */
+.page-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  columns: 1;
+  max-height: 46vh;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+}
+.page-list li + li {
+  border-top: 1px solid var(--line);
+}
+.page-list button {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.page-list button:hover {
+  background: var(--bg-hover);
 }

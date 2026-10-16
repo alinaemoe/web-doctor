@@ -17,16 +17,36 @@ interface Props {
   onChange: (next: Filters) => void;
   pageUrls: string[];
   shown: number;
-  total: number;
+  counts: { fail: number; unverified: number };
   searchRef: RefObject<HTMLInputElement | null>;
 }
 
-export function FilterBar({ filters, onChange, pageUrls, shown, total, searchRef }: Props) {
+export function FilterBar({ filters, onChange, pageUrls, shown, counts, searchRef }: Props) {
   const set = <K extends keyof Filters>(key: K, value: Filters[K]) =>
     onChange({ ...filters, [key]: value });
 
+  const tabs: { id: Filters["verdict"]; label: string; count: number }[] = [
+    { id: "fail", label: t.failing, count: counts.fail },
+    { id: "unverified", label: t.unverified, count: counts.unverified },
+    { id: "all", label: t.all, count: counts.fail + counts.unverified },
+  ];
+
   return (
     <section className="filters" aria-label={t.filters}>
+      <div className="tabs" role="group" aria-label={t.verdict}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            aria-pressed={filters.verdict === tab.id}
+            onClick={() => set("verdict", tab.id)}
+          >
+            {tab.label}
+            <span className="count">{tab.count}</span>
+          </button>
+        ))}
+      </div>
+
       <input
         ref={searchRef}
         type="search"
@@ -67,18 +87,6 @@ export function FilterBar({ filters, onChange, pageUrls, shown, total, searchRef
 
       <div className="select-row">
         <label>
-          <span>{t.verdict}</span>
-          <select
-            className="input"
-            value={filters.verdict}
-            onChange={(e) => set("verdict", e.target.value as Filters["verdict"])}
-          >
-            <option value="fail">{t.failing}</option>
-            <option value="unverified">{t.unverified}</option>
-            <option value="all">{t.all}</option>
-          </select>
-        </label>
-        <label>
           <span>{t.viewport}</span>
           <select
             className="input"
@@ -117,7 +125,7 @@ export function FilterBar({ filters, onChange, pageUrls, shown, total, searchRef
           {t.groupBy}
         </label>
         <span className="muted" aria-live="polite">
-          {t.issuesShown(shown, total)}
+          {shown} {shown === 1 ? "item" : "items"}
         </span>
       </div>
     </section>

@@ -88,7 +88,7 @@ describe("Inspector", () => {
 
     await user.click(screen.getByRole("button", { name: "high" }));
     expect(rows()).toHaveLength(1);
-    expect(screen.getByText("1 of 4 shown")).toBeInTheDocument();
+    expect(screen.getByText("1 item")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "high" }));
 
     await user.type(screen.getByRole("searchbox", { name: "Search issues" }), "zzz-nothing");
@@ -100,7 +100,7 @@ describe("Inspector", () => {
     render(<Inspector report={report} />);
     expect(screen.queryByText(/External link could not be verified/)).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Result"), "unverified");
+    await user.click(screen.getByRole("button", { name: /^Couldn't verify/ }));
     await user.click(screen.getByRole("button", { name: /External link could not be verified/ }));
     const details = screen.getByRole("article", { name: "Issue details" });
     expect(details).toHaveTextContent("Couldn't verify");
@@ -116,7 +116,7 @@ describe("Inspector", () => {
     expect(user).toBeDefined();
   });
 
-  it("switches viewport with the buttons and the 1/2 keys", async () => {
+  it("switches viewport with the buttons", async () => {
     const user = userEvent.setup();
     render(<Inspector report={report} />);
     const desktop = screen.getByRole("button", { name: "Desktop" });
@@ -125,10 +125,8 @@ describe("Inspector", () => {
 
     await user.click(mobile);
     expect(mobile).toHaveAttribute("aria-pressed", "true");
-    await user.keyboard("1");
+    await user.click(desktop);
     expect(desktop).toHaveAttribute("aria-pressed", "true");
-    await user.keyboard("2");
-    expect(mobile).toHaveAttribute("aria-pressed", "true");
   });
 
   it("moves through the list with j and k, but not while typing", async () => {
@@ -173,5 +171,46 @@ describe("Inspector", () => {
     render(<Inspector report={evil} initialIssueId="console-a" />);
     expect(document.querySelector("img[src='x']")).toBeNull();
     expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
+  });
+
+  it("switches between failing and unverified with visible tabs that show counts", async () => {
+    const user = userEvent.setup();
+    render(<Inspector report={report} />);
+    const failing = screen.getByRole("button", { name: /^Failing/ });
+    const unverified = screen.getByRole("button", { name: /^Couldn't verify/ });
+    expect(failing).toHaveAttribute("aria-pressed", "true");
+    expect(failing).toHaveTextContent("4");
+    expect(unverified).toHaveTextContent("1");
+
+    await user.click(unverified);
+    expect(unverified).toHaveAttribute("aria-pressed", "true");
+    expect(rows()).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: /^All/ }));
+    expect(rows()).toHaveLength(3);
+  });
+
+  it("lists the pages of a group as a clear list with a hint", async () => {
+    const user = userEvent.setup();
+    render(<Inspector report={report} />);
+    await user.click(screen.getByRole("button", { name: /Page has no <h1> — 3 pages/ }));
+    const group = screen.getByRole("article", { name: "Group details" });
+    expect(within(group).getByText(/Click a page to see where the problem is/)).toBeInTheDocument();
+    expect(within(group).getAllByRole("button", { name: /^\/[abc]/ })).toHaveLength(3);
+    expect(within(group).getByText(/Shared element: body > main/)).toBeInTheDocument();
+  });
+
+  it("puts the fix before the explanation and tells the real size of the screenshot", async () => {
+    const user = userEvent.setup();
+    render(<Inspector report={report} />);
+    await user.click(screen.getByRole("button", { name: /JavaScript error on the page/ }));
+    loadScreenshot(1366, 2000);
+    const details = screen.getByRole("article", { name: "Issue details" });
+    const text = details.textContent ?? "";
+    expect(text.indexOf("How to fix")).toBeLessThan(text.indexOf("Why it matters"));
+    expect(screen.getByText(/1366 × 2000 px/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "100%" }));
+    expect(document.querySelector(".shot")).toHaveAttribute("data-zoom", "actual");
+    expect((document.querySelector(".shot") as HTMLElement).style.width).toBe("1366px");
   });
 });
