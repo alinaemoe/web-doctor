@@ -15,6 +15,7 @@
     "@fastify/static": "^10.1.6",
     "@webdoctor/core": "workspace:*",
     "@webdoctor/storage": "workspace:*",
+    "@webdoctor/verify": "workspace:*",
     "fastify": "^5.12.7"
   }
 }

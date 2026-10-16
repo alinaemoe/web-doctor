@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Report } from "@webdoctor/core/shared";
-import { applyFilters, buildList, defaultFilters } from "../lib/filters";
+import type { VerifyUi } from "../lib/verifyUi";
+import { applyFilters, buildList, defaultFilters, isFixed } from "../lib/filters";
 import type { Filters, ListItem } from "../lib/filters";
 import { buildModel } from "../lib/model";
 import { GroupDetails, IssueDetails } from "./Details";
@@ -19,6 +20,8 @@ interface Selection {
 interface Props {
   report: Report;
   initialIssueId?: string;
+  /** Omit to hide the Re-verify controls (read-only view). */
+  verify?: VerifyUi;
   /** Called with the issue currently in focus (for the address bar). */
   onIssueChange?: (issueId: string | undefined) => void;
 }
@@ -30,7 +33,7 @@ function isTyping(target: EventTarget | null): boolean {
   );
 }
 
-export function Inspector({ report, initialIssueId, onIssueChange }: Props) {
+export function Inspector({ report, initialIssueId, onIssueChange, verify }: Props) {
   const model = useMemo(() => buildModel(report), [report]);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -68,17 +71,30 @@ export function Inspector({ report, initialIssueId, onIssueChange }: Props) {
   );
 
   const counts = {
-    fail: model.issues.filter((i) => i.verdict === "fail").length,
-    unverified: model.issues.filter((i) => i.verdict === "unverified").length,
+    fail: model.issues.filter((i) => i.verdict === "fail" && !isFixed(i)).length,
+    unverified: model.issues.filter((i) => i.verdict === "unverified" && !isFixed(i)).length,
+    fixed: model.issues.filter(isFixed).length,
   };
 
-  // Keep the selection valid when filters remove the selected row.
+  // The list row that is highlighted. With nothing chosen yet, the top row.
   const selectedItem: ListItem | undefined =
     items.find((i) => i.key === sel.key) ?? (sel.key === null ? items[0] : undefined);
   const effectiveKey = selectedItem?.key ?? null;
+  // When the chosen row leaves the list (e.g. a verified fix moves to the Fixed tab), keep
+  // showing the issue the user was looking at instead of jumping to another one.
+  const lastFocusRef = useRef<string | undefined>(undefined);
   const focusIssue =
     (sel.issueId ? model.issuesById.get(sel.issueId) : undefined) ??
-    (selectedItem?.kind === "issue" ? selectedItem.issue : selectedItem?.representative);
+    (selectedItem
+      ? selectedItem.kind === "issue"
+        ? selectedItem.issue
+        : selectedItem.representative
+      : lastFocusRef.current
+        ? model.issuesById.get(lastFocusRef.current)
+        : undefined);
+  useEffect(() => {
+    if (selectedItem || sel.issueId) lastFocusRef.current = focusIssue?.id;
+  });
   const showGroup = selectedItem?.kind === "group" && !sel.issueId;
 
   // A new selection resets manual page browsing and follows the issue's viewport.
@@ -165,6 +181,7 @@ export function Inspector({ report, initialIssueId, onIssueChange }: Props) {
             item={selectedItem}
             model={model}
             onSelectIssue={(id) => setSel({ key: selectedItem.key, issueId: id })}
+            verify={verify}
           />
         ) : focusIssue ? (
           <>
@@ -177,7 +194,7 @@ export function Inspector({ report, initialIssueId, onIssueChange }: Props) {
                 ← Back to group
               </button>
             )}
-            <IssueDetails issue={focusIssue} model={model} />
+            <IssueDetails issue={focusIssue} model={model} verify={verify} />
           </>
         ) : (
           <p className="empty">Select an issue from the list.</p>

@@ -1,9 +1,12 @@
 #!/usr/bin/env tsx
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cac } from "cac";
 import { createApiServer } from "@webdoctor/api";
+import { openStore } from "@webdoctor/storage";
+import { verifyAndSave } from "@webdoctor/verify";
 import type { Category, ScanViewport, Severity } from "@webdoctor/core";
 import { ALL_CATEGORIES, SEVERITY_RANK, runScan } from "./runScan";
 import type { ReportFormat } from "./runScan";
@@ -149,6 +152,49 @@ cli
     console.log(`Web Doctor inspector: http://127.0.0.1:${actual}/?token=${token}`);
     console.log("Press Ctrl+C to stop.");
     process.once("SIGINT", () => void app.close().then(() => process.exit(0)));
+  });
+
+cli
+  .command("verify <issueId>", "Re-check one issue of a saved run and say whether it is fixed")
+  .option("--dir <dir>", "Directory with scan results", { default: ".webdoctor" })
+  .option("--run <runId>", "Run containing the issue (default: the newest run that has it)")
+  .action(async (issueId: string, flags: Record<string, unknown>) => {
+    const dir = resolve(String(flags.dir));
+    const store = openStore(join(dir, "webdoctor.db"));
+    try {
+      const runs = store.listRuns();
+      const runId =
+        typeof flags.run === "string"
+          ? flags.run
+          : runs.find((r) => store.getReport(r.id)?.issues.some((i) => i.id === issueId))?.id;
+      if (!runId) fail(`issue ${issueId} not found in any run under ${dir}`);
+
+      const { results, issues } = await verifyAndSave(store, runId, [issueId]).catch((error) =>
+        fail((error as Error).message),
+      );
+      const [v] = results;
+      const [issue] = issues;
+      const label = {
+        "verified-fixed": "VERIFIED FIXED",
+        "still-failing": "STILL FAILING",
+        unverified: "COULDN'T VERIFY",
+      }[v!.outcome];
+      console.log(`${label}: ${issue!.title}`);
+      console.log(`  ${issue!.explanation.where}`);
+      console.log(`  ${v!.detail}`);
+      if (v!.confidence > 0 && v!.confidence < 1) {
+        console.log(`  confidence ${Math.round(v!.confidence * 100)}%`);
+      }
+      process.exit(
+        v!.outcome === "verified-fixed"
+          ? EXIT.ok
+          : v!.outcome === "still-failing"
+            ? EXIT.issues
+            : EXIT.partial,
+      );
+    } finally {
+      store.close();
+    }
   });
 
 cli.help();

@@ -6,7 +6,7 @@ export interface Filters {
   /** Empty = no restriction. */
   categories: Category[];
   severities: Severity[];
-  verdict: "fail" | "unverified" | "all";
+  verdict: "fail" | "unverified" | "fixed" | "all";
   viewport: "all" | "desktop" | "mobile";
   /** Exact page URL, "" = all pages. */
   page: string;
@@ -24,12 +24,16 @@ export const defaultFilters: Filters = {
   grouped: true,
 };
 
+export const isFixed = (i: Issue): boolean => i.status === "fixed";
+
 export function applyFilters(issues: Issue[], f: Filters): Issue[] {
   const q = f.query.trim().toLowerCase();
   return issues.filter((i) => {
     if (f.categories.length && !f.categories.includes(i.category)) return false;
     if (f.severities.length && !f.severities.includes(i.severity)) return false;
-    if (f.verdict !== "all" && i.verdict !== f.verdict) return false;
+    if (f.verdict === "fail" && (i.verdict !== "fail" || isFixed(i))) return false;
+    if (f.verdict === "unverified" && (i.verdict !== "unverified" || isFixed(i))) return false;
+    if (f.verdict === "fixed" && !isFixed(i)) return false;
     // An issue seen on both viewports ("all") matches either viewport filter.
     if (f.viewport !== "all" && i.viewport !== "all" && i.viewport !== f.viewport) return false;
     if (f.page && i.pageUrl !== f.page) return false;

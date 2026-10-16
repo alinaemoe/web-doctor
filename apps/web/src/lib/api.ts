@@ -1,5 +1,6 @@
-import { ReportSchema } from "@webdoctor/core/shared";
-import type { Report } from "@webdoctor/core/shared";
+import { IssueSchema, ReportSchema, VerificationSchema } from "@webdoctor/core/shared";
+import type { Issue, Report, Verification } from "@webdoctor/core/shared";
+import { z } from "zod";
 
 const STORAGE_KEY = "webdoctor.token";
 
@@ -72,4 +73,62 @@ export async function fetchReport(runId: string): Promise<Report> {
 export function artifactUrl(runId: string, key: string): string {
   const path = key.split("/").map(encodeURIComponent).join("/");
   return `/api/runs/${encodeURIComponent(runId)}/artifacts/${path}?token=${encodeURIComponent(token ?? "")}`;
+}
+
+async function post(path: string, body?: unknown): Promise<unknown> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: {
+      "x-webdoctor-token": token ?? "",
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((j: { error?: string }) => j.error)
+      .catch(() => undefined);
+    throw new ApiError(detail ?? `Request failed (${res.status})`, res.status);
+  }
+  return res.json();
+}
+
+export async function fetchVerifications(runId: string): Promise<Verification[]> {
+  return z
+    .array(VerificationSchema)
+    .parse(await get(`/api/runs/${encodeURIComponent(runId)}/verifications`));
+}
+
+export interface VerifyResponse {
+  results: Verification[];
+  issues: Issue[];
+  checkedPages?: number;
+  totalPages?: number;
+}
+
+const VerifyResponseSchema = z.object({
+  results: z.array(VerificationSchema),
+  issues: z.array(IssueSchema),
+  checkedPages: z.number().optional(),
+  totalPages: z.number().optional(),
+});
+
+export async function verifyIssue(runId: string, issueId: string): Promise<VerifyResponse> {
+  return VerifyResponseSchema.parse(
+    await post(
+      `/api/runs/${encodeURIComponent(runId)}/issues/${encodeURIComponent(issueId)}/verify`,
+    ),
+  );
+}
+
+export async function verifyGroup(runId: string, groupId: string): Promise<VerifyResponse> {
+  return VerifyResponseSchema.parse(
+    await post(
+      `/api/runs/${encodeURIComponent(runId)}/groups/${encodeURIComponent(groupId)}/verify`,
+      {
+        limit: 5,
+      },
+    ),
+  );
 }

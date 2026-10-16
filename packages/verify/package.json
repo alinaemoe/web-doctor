@@ -1,0 +1,23 @@
+{
+  "name": "@webdoctor/verify",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Verify Fix: re-check single issues or groups and report fixed / still failing / couldn't verify.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@webdoctor/core": "workspace:*",
+    "@webdoctor/rules": "workspace:*",
+    "@webdoctor/scanner": "workspace:*",
+    "@webdoctor/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "@webdoctor/demo-site": "workspace:*"
+  }
+}

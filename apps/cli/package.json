@@ -17,6 +17,7 @@
     "@webdoctor/rules": "workspace:*",
     "@webdoctor/scanner": "workspace:*",
     "@webdoctor/storage": "workspace:*",
+    "@webdoctor/verify": "workspace:*",
     "cac": "^7.1.0"
   },
   "devDependencies": {

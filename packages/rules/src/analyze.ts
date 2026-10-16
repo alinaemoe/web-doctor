@@ -57,15 +57,19 @@ export function groupSignature(issue: Pick<Issue, "ruleId" | "evidence">): strin
  * Same problem seen in several viewports becomes one issue (`viewport: "all"`).
  * Identity = fingerprint (rule + page + element + evidence), see core/fingerprint.
  */
+export function fingerprintDraft(draft: IssueDraft): string {
+  return computeFingerprint({
+    ruleId: draft.ruleId,
+    pageUrl: draft.pageUrl,
+    elementKey: elementKeyOf(draft.evidence),
+    evidenceKey: evidenceKeyOf(draft.evidence),
+  });
+}
+
 function mergeDrafts(drafts: IssueDraft[]): { draft: IssueDraft; fingerprint: string }[] {
   const byFingerprint = new Map<string, IssueDraft>();
   for (const draft of drafts) {
-    const fingerprint = computeFingerprint({
-      ruleId: draft.ruleId,
-      pageUrl: draft.pageUrl,
-      elementKey: elementKeyOf(draft.evidence),
-      evidenceKey: evidenceKeyOf(draft.evidence),
-    });
+    const fingerprint = fingerprintDraft(draft);
     const existing = byFingerprint.get(fingerprint);
     if (!existing) {
       byFingerprint.set(fingerprint, { ...draft });

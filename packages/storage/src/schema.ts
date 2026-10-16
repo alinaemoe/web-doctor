@@ -68,3 +68,16 @@ export const issueGroups = sqliteTable(
   },
   (t) => [index("groups_run_idx").on(t.runId)],
 );
+
+export const verifications = sqliteTable(
+  "verifications",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    runId: text("run_id").notNull(),
+    issueId: text("issue_id").notNull(),
+    outcome: text("outcome").notNull(),
+    checkedAt: text("checked_at").notNull(),
+    data: text("data", { mode: "json" }).notNull(),
+  },
+  (t) => [index("verifications_run_idx").on(t.runId, t.issueId)],
+);

@@ -63,6 +63,18 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX groups_run_idx ON issue_groups (run_id);
   `,
+  // 2: Verify Fix results
+  `
+  CREATE TABLE verifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    issue_id TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    data TEXT NOT NULL
+  );
+  CREATE INDEX verifications_run_idx ON verifications (run_id, issue_id);
+  `,
 ];
 
 export function migrate(db: Database.Database): void {

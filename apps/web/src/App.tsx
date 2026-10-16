@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Report } from "@webdoctor/core/shared";
-import { Inspector } from "./components/Inspector";
+import type { Report, Verification } from "@webdoctor/core/shared";
+import { RunWorkspace } from "./components/RunWorkspace";
 import { RunsPage } from "./components/RunsPage";
-import { fetchReport, fetchRuns, initToken } from "./lib/api";
+import { fetchReport, fetchRuns, fetchVerifications, initToken } from "./lib/api";
 import type { RunListItem } from "./lib/api";
 import { parseHash, runHash } from "./lib/route";
 import type { Route } from "./lib/route";
@@ -66,7 +66,10 @@ function useLoad<T>(load: () => Promise<T>, key: string): Load<T> {
 }
 
 function RunView({ id, issue }: { id: string; issue?: string }) {
-  const report = useLoad<Report>(() => fetchReport(id), id);
+  const loaded = useLoad<[Report, Verification[]]>(
+    () => Promise.all([fetchReport(id), fetchVerifications(id)]),
+    id,
+  );
   const onIssueChange = useCallback(
     (issueId: string | undefined) => {
       // keep the address bar shareable without adding history entries
@@ -75,14 +78,23 @@ function RunView({ id, issue }: { id: string; issue?: string }) {
     },
     [id],
   );
-  if (report.state === "loading") return <p className="empty page-pad">{t.loading}</p>;
-  if (report.state === "error")
+  if (loaded.state === "loading") return <p className="empty page-pad">{t.loading}</p>;
+  if (loaded.state === "error")
     return (
       <p className="empty page-pad" role="alert">
-        {report.message}
+        {loaded.message}
       </p>
     );
-  return <Inspector report={report.data} initialIssueId={issue} onIssueChange={onIssueChange} />;
+  const [report, verifications] = loaded.data;
+  return (
+    <RunWorkspace
+      key={id}
+      initialReport={report}
+      initialVerifications={verifications}
+      initialIssueId={issue}
+      onIssueChange={onIssueChange}
+    />
+  );
 }
 
 export function App() {

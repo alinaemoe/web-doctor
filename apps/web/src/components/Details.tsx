@@ -3,7 +3,10 @@ import type { Evidence, Issue } from "@webdoctor/core/shared";
 import { pathOf, priorityOf } from "../lib/model";
 import type { Model } from "../lib/model";
 import { t, unverifiedReasons } from "../lib/strings";
+import { isFixed } from "../lib/filters";
 import type { ListItem } from "../lib/filters";
+import { latestFor } from "../lib/verifyUi";
+import type { VerifyUi } from "../lib/verifyUi";
 
 const CATEGORY_LABEL: Record<string, string> = {
   "links-resources": "Links & resources",
@@ -124,7 +127,134 @@ function FixCard({
   );
 }
 
-export function IssueDetails({ issue, model }: { issue: Issue; model: Model }) {
+const OUTCOME_UI = {
+  "verified-fixed": { icon: "✓", label: t.verifiedFixed, tone: "ok" },
+  "still-failing": { icon: "✗", label: t.stillFailing, tone: "bad" },
+  unverified: { icon: "?", label: t.verifyUnverified, tone: "warn" },
+} as const;
+
+function timeOf(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
+
+function IssueVerify({ issue, verify }: { issue: Issue; verify: VerifyUi }) {
+  const last = latestFor(verify.verifications, issue.id);
+  const running = verify.running.has(`issue:${issue.id}`);
+  const fixed = isFixed(issue);
+  const ui = last ? OUTCOME_UI[last.outcome] : undefined;
+  const tone = running ? "run" : fixed ? "ok" : (ui?.tone ?? "none");
+
+  return (
+    <section className={`verify verify-${tone}`} aria-label="Verify fix">
+      <div className="verify-head">
+        <div>
+          <strong className="verify-status">
+            {running
+              ? t.checking
+              : fixed
+                ? `✓ ${t.verifiedFixed}`
+                : ui
+                  ? `${ui.icon} ${ui.label}`
+                  : "Not re-checked yet"}
+          </strong>
+          {last && !running && <span className="muted small"> · {timeOf(last.checkedAt)}</span>}
+        </div>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={running}
+          onClick={() => verify.onIssue(issue.id)}
+        >
+          {running ? t.checking : fixed ? t.checkAgain : t.reverify}
+        </button>
+      </div>
+      {last && !running && (
+        <p className="verify-detail">
+          {last.detail}
+          {last.relocated && ` ${t.relocatedNote}`}
+          {last.elementGone && ` ${t.goneNote}`}
+          {last.confidence > 0 && last.confidence < 1 && (
+            <span className="muted"> ({Math.round(last.confidence * 100)}% sure)</span>
+          )}
+        </p>
+      )}
+      {!last && !running && <p className="muted small">{t.verifyHint}</p>}
+      {verify.error && (
+        <p className="verify-detail" role="alert">
+          {verify.error}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function GroupVerify({
+  item,
+  model,
+  verify,
+}: {
+  item: Extract<ListItem, { kind: "group" }>;
+  model: Model;
+  verify: VerifyUi;
+}) {
+  const all = model.issues.filter((i) => i.groupId === item.group.id);
+  const fixed = all.filter(isFixed).length;
+  const stillFailing = all.filter((i) => {
+    const v = latestFor(verify.verifications, i.id);
+    return !isFixed(i) && v?.outcome === "still-failing";
+  }).length;
+  const run = verify.groupRuns[item.group.id];
+  const running = verify.running.has(`group:${item.group.id}`);
+  const unresolved = all.length - fixed;
+  const pageCount = new Set(item.members.map((m) => m.pageUrl)).size;
+  const sample = Math.min(5, pageCount);
+  const tone = running ? "run" : fixed === all.length ? "ok" : stillFailing > 0 ? "bad" : "none";
+
+  return (
+    <section className={`verify verify-${tone}`} aria-label="Verify fix">
+      <div className="verify-head">
+        <strong className="verify-status">
+          {running
+            ? t.checking
+            : fixed === all.length
+              ? `✓ ${t.verifiedFixed}: all ${all.length}`
+              : `${fixed} of ${all.length} verified fixed`}
+        </strong>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={running || unresolved === 0}
+          onClick={() => verify.onGroup(item.group.id)}
+        >
+          {running ? t.checking : `${t.reverify} ${sample} ${sample === 1 ? "page" : "pages"}`}
+        </button>
+      </div>
+      <p className="verify-detail">
+        {run
+          ? `Last check covered ${run.checkedPages} of ${run.totalPages} pages. Pages that were not checked stay unconfirmed.`
+          : "Checks a sample of pages (one issue per page), not all of them."}
+        {stillFailing > 0 &&
+          ` ${stillFailing} checked page${stillFailing === 1 ? " is" : "s are"} still failing.`}
+      </p>
+      {verify.error && (
+        <p className="verify-detail" role="alert">
+          {verify.error}
+        </p>
+      )}
+    </section>
+  );
+}
+
+export function IssueDetails({
+  issue,
+  model,
+  verify,
+}: {
+  issue: Issue;
+  model: Model;
+  verify?: VerifyUi;
+}) {
   const { done, copy } = useCopy();
   const p = priorityOf(issue, model);
   const dom = issue.evidence.find((e) => e.type === "dom");
@@ -151,6 +281,8 @@ export function IssueDetails({ issue, model }: { issue: Issue; model: Model }) {
           {t.unverifiedNote}
         </p>
       )}
+
+      {verify && <IssueVerify issue={issue} verify={verify} />}
 
       <FixCard
         howToFix={x.howToFix}
@@ -212,11 +344,14 @@ const SIGNATURE_LABEL: Record<string, string> = {
 
 export function GroupDetails({
   item,
+  model,
   onSelectIssue,
+  verify,
 }: {
   item: Extract<ListItem, { kind: "group" }>;
   model: Model;
   onSelectIssue: (id: string) => void;
+  verify?: VerifyUi;
 }) {
   const rep = item.representative;
   const byPage = new Map<string, Issue>();
@@ -248,6 +383,8 @@ export function GroupDetails({
           </p>
         )}
       </header>
+
+      {verify && <GroupVerify item={item} model={model} verify={verify} />}
 
       <FixCard
         howToFix={rep.explanation.howToFix}

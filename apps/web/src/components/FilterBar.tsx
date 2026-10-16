@@ -17,7 +17,7 @@ interface Props {
   onChange: (next: Filters) => void;
   pageUrls: string[];
   shown: number;
-  counts: { fail: number; unverified: number };
+  counts: { fail: number; unverified: number; fixed: number };
   searchRef: RefObject<HTMLInputElement | null>;
 }
 
@@ -28,7 +28,8 @@ export function FilterBar({ filters, onChange, pageUrls, shown, counts, searchRe
   const tabs: { id: Filters["verdict"]; label: string; count: number }[] = [
     { id: "fail", label: t.failing, count: counts.fail },
     { id: "unverified", label: t.unverified, count: counts.unverified },
-    { id: "all", label: t.all, count: counts.fail + counts.unverified },
+    { id: "fixed", label: t.fixed, count: counts.fixed },
+    { id: "all", label: t.all, count: counts.fail + counts.unverified + counts.fixed },
   ];
 
   return (

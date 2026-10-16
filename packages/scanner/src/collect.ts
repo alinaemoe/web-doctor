@@ -26,6 +26,12 @@ export interface CollectOptions {
   artifacts: ArtifactStore;
   pageTimeoutMs: number;
   userAgent?: string;
+  /** Default true. Verify Fix skips it. */
+  screenshot?: boolean;
+  /** Default true. */
+  axe?: boolean;
+  /** CSS selectors to test for existence after load (stored in `snapshot.probes`). */
+  probes?: string[];
 }
 
 export type CollectResult =
@@ -179,14 +185,15 @@ export async function collectPage(
     const extract: PageExtract = await page.evaluate(extractInPage);
 
     let violations: AxeViolation[] = [];
-    try {
-      await page.addScriptTag({ content: axe.source });
-      violations = (await page.evaluate(
-        `${AXE_EVAL}(${JSON.stringify(AXE_TAGS)})`,
-      )) as AxeViolation[];
-    } catch {
-      // axe can fail on exotic pages; other categories still work.
-    }
+    if (options.axe !== false)
+      try {
+        await page.addScriptTag({ content: axe.source });
+        violations = (await page.evaluate(
+          `${AXE_EVAL}(${JSON.stringify(AXE_TAGS)})`,
+        )) as AxeViolation[];
+      } catch {
+        // axe can fail on exotic pages; other categories still work.
+      }
 
     // Body sizes are available only after loading finished.
     await Promise.all(
@@ -201,22 +208,42 @@ export async function collectPage(
       }),
     );
 
+    let probes: Record<string, boolean> | undefined;
+    if (options.probes?.length) {
+      probes = await page
+        .evaluate(
+          (selectors) =>
+            Object.fromEntries(
+              selectors.map((s) => {
+                try {
+                  return [s, document.querySelector(s) !== null];
+                } catch {
+                  return [s, false];
+                }
+              }),
+            ),
+          options.probes,
+        )
+        .catch(() => undefined);
+    }
+
     const height = Math.min(extract.fullHeight, MAX_SCREENSHOT_HEIGHT);
     const truncated = extract.fullHeight > MAX_SCREENSHOT_HEIGHT;
     let screenshotKey: string | undefined;
-    try {
-      const png = await page.screenshot({
-        fullPage: true,
-        type: "png",
-        clip: { x: 0, y: 0, width: vp.width, height: Math.max(1, height) },
-      });
-      const webp = await sharp(png).webp({ quality: 80 }).toBuffer();
-      const digest = createHash("sha1").update(url).digest("hex").slice(0, 10);
-      screenshotKey = `screenshots/${digest}-${options.viewport}.webp`;
-      await options.artifacts.write(screenshotKey, webp);
-    } catch {
-      screenshotKey = undefined;
-    }
+    if (options.screenshot !== false)
+      try {
+        const png = await page.screenshot({
+          fullPage: true,
+          type: "png",
+          clip: { x: 0, y: 0, width: vp.width, height: Math.max(1, height) },
+        });
+        const webp = await sharp(png).webp({ quality: 80 }).toBuffer();
+        const digest = createHash("sha1").update(url).digest("hex").slice(0, 10);
+        screenshotKey = `screenshots/${digest}-${options.viewport}.webp`;
+        await options.artifacts.write(screenshotKey, webp);
+      } catch {
+        screenshotKey = undefined;
+      }
 
     // Redirect hops show up as their own 3xx responses; the final request carries the chain.
     const network = requests
@@ -249,6 +276,7 @@ export async function collectPage(
         network,
         console: consoleEntries,
         axe: violations,
+        probes,
         screenshotKey,
         fullHeight: extract.fullHeight,
         screenshotTruncated: truncated,

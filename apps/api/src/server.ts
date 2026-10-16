@@ -4,8 +4,26 @@ import { readFile } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { openStore } from "@webdoctor/storage";
+import type { Store } from "@webdoctor/storage";
+import { VerifyInputError, verifyAndSave, verifyGroupAndSave } from "@webdoctor/verify";
+import type { GroupVerifyResult, VerifyRunResult } from "@webdoctor/verify";
+
+/** What the API runs for "Re-verify". Replaceable so tests do not need a browser. */
+export interface Verifier {
+  issues(store: Store, runId: string, issueIds: string[]): Promise<VerifyRunResult>;
+  group(store: Store, runId: string, groupId: string, limit: number): Promise<GroupVerifyResult>;
+}
+
+const defaultVerifier: Verifier = {
+  issues: (store, runId, ids) => verifyAndSave(store, runId, ids, { pageTimeoutMs: 20_000 }),
+  group: (store, runId, groupId, limit) =>
+    verifyGroupAndSave(store, runId, groupId, limit, { pageTimeoutMs: 20_000 }),
+};
+
+/** Verifications are heavy (a real browser): run one at a time and refuse a long backlog. */
+const MAX_PENDING_VERIFICATIONS = 3;
 
 export interface ApiOptions {
   /** Directory with `webdoctor.db` and `runs/` (the CLI's `--out`). */
@@ -15,6 +33,7 @@ export interface ApiOptions {
   /** Built web UI to serve at `/` (optional). */
   webDir?: string;
   logger?: boolean;
+  verifier?: Verifier;
 }
 
 const RUN_ID = /^[\w-]{1,100}$/;
@@ -70,6 +89,67 @@ export async function createApiServer(options: ApiOptions): Promise<FastifyInsta
   app.get("/api/health", async () => ({ ok: true }));
 
   app.get("/api/runs", async () => store.listRuns());
+
+  app.get<{ Params: { id: string } }>("/api/runs/:id/verifications", async (req, reply) => {
+    if (!RUN_ID.test(req.params.id)) return reply.code(400).send({ error: "bad run id" });
+    return store.listVerifications(req.params.id);
+  });
+
+  // ---- Verify Fix ----
+  const verifier = options.verifier ?? defaultVerifier;
+  let chain: Promise<unknown> = Promise.resolve();
+  let pending = 0;
+  const enqueue = async <T>(job: () => Promise<T>): Promise<T | "busy"> => {
+    if (pending >= MAX_PENDING_VERIFICATIONS) return "busy";
+    pending++;
+    const run = chain.then(job, job);
+    chain = run.catch(() => undefined);
+    try {
+      return await run;
+    } finally {
+      pending--;
+    }
+  };
+
+  const respond = async <T>(reply: FastifyReply, job: () => Promise<T>): Promise<unknown> => {
+    try {
+      const result = await enqueue(job);
+      if (result === "busy") {
+        return reply.code(429).send({ error: "Too many verifications queued. Try again shortly." });
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof VerifyInputError) return reply.code(404).send({ error: error.message });
+      app.log.error(error);
+      return reply.code(500).send({ error: "Verification failed. See the server log." });
+    }
+  };
+
+  app.post<{ Params: { id: string; issueId: string } }>(
+    "/api/runs/:id/issues/:issueId/verify",
+    async (req, reply) => {
+      const { id, issueId } = req.params;
+      if (!RUN_ID.test(id) || !RUN_ID.test(issueId)) {
+        return reply.code(400).send({ error: "bad id" });
+      }
+      return respond(reply, () => verifier.issues(store, id, [issueId]));
+    },
+  );
+
+  app.post<{ Params: { id: string; groupId: string }; Body: { limit?: number } | undefined }>(
+    "/api/runs/:id/groups/:groupId/verify",
+    async (req, reply) => {
+      const { id, groupId } = req.params;
+      if (!RUN_ID.test(id) || !RUN_ID.test(groupId)) {
+        return reply.code(400).send({ error: "bad id" });
+      }
+      const requested = Number(req.body?.limit ?? 5);
+      const limit = Number.isFinite(requested)
+        ? Math.min(10, Math.max(1, Math.floor(requested)))
+        : 5;
+      return respond(reply, () => verifier.group(store, id, groupId, limit));
+    },
+  );
 
   app.get<{ Params: { id: string } }>("/api/runs/:id", async (req, reply) => {
     if (!RUN_ID.test(req.params.id)) return reply.code(400).send({ error: "bad run id" });

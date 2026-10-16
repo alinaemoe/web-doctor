@@ -14,6 +14,10 @@ import { isAllowedByRobots, parseRobots, parseSitemapLocs } from "./robots";
 
 export const SCANNER_VERSION = "0.0.0";
 
+/** Shared by the crawler and Verify Fix. */
+export const launchBrowser = () => chromium.launch();
+export type BrowserHandle = Awaited<ReturnType<typeof launchBrowser>>;
+
 export type ScanProgress =
   | { type: "page"; url: string; viewport: ScanViewport; done: number; queued: number }
   | { type: "skipped"; url: string; reason: SkippedUrl["reason"] }

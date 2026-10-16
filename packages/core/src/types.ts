@@ -18,6 +18,8 @@ import type {
   StatusSchema,
   UnverifiedReasonSchema,
   VerdictSchema,
+  VerificationSchema,
+  VerifyOutcomeSchema,
   ViewportSchema,
 } from "./schemas";
 
@@ -40,3 +42,5 @@ export type Run = z.infer<typeof RunSchema>;
 export type IssueGroup = z.infer<typeof IssueGroupSchema>;
 export type PageSummary = z.infer<typeof PageSummarySchema>;
 export type Report = z.infer<typeof ReportSchema>;
+export type Verification = z.infer<typeof VerificationSchema>;
+export type VerifyOutcome = z.infer<typeof VerifyOutcomeSchema>;

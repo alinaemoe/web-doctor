@@ -96,6 +96,9 @@ export interface PageSnapshot {
   console: ConsoleEntry[];
   axe: AxeViolation[];
 
+  /** For Verify Fix: whether each probed selector still matches an element. */
+  probes?: Record<string, boolean>;
+
   /** Artifact key of the full-page screenshot. */
   screenshotKey?: string;
   fullHeight: number;

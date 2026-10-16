@@ -3,8 +3,8 @@
 A visual debugging workspace for websites: find a problem, see it on the real page, understand it,
 fix it, **re-verify** it, and track it over time. See [TZ.md](TZ.md) for the full specification.
 
-> Status: **M2 — visual inspector.** CLI scan plus a local web inspector (3 panels, highlights on the
-> screenshot, filters, issue details). Verify Fix (M3) and run history (M4) are next.
+> Status: **M3 — Verify Fix.** Scan, inspect, fix, then re-check a single issue or a sample of a root-cause
+> group and see whether it is really fixed. Run history and Regression Radar (M4) are next.
 
 ## Layout
 
@@ -50,6 +50,20 @@ The API listens on `127.0.0.1` only, requires the printed access token and rejec
 `Host` headers. Keys: `j`/`k` move through issues, `1`/`2` switch Desktop/Mobile, `/` searches.
 For UI development: `pnpm webdoctor ui --token dev` and `pnpm --filter @webdoctor/web dev`, then open
 `http://localhost:5173/?token=dev`.
+
+## Verify a fix
+
+In the inspector press **Re-verify** on an issue (or on a root-cause group: it checks up to 5 pages),
+or from the terminal:
+
+```bash
+pnpm webdoctor verify <issueId>      # exit 0 fixed, 1 still failing, 3 couldn't verify
+```
+
+Only the page and rule behind the issue are re-checked (no crawl, no screenshots). Outcomes:
+**Verified fixed**, **Still failing**, **Couldn't verify**. A page that cannot be loaded, or a link
+target that cannot be re-checked, is never reported as fixed. When the original element is gone the
+result is marked less certain. Statuses and results are saved in the run's database.
 
 Not in M1/M2 yet: sitemap-based discovery, interactive DOM snapshots, page states, Lighthouse.
 

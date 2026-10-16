@@ -24,6 +24,7 @@ export const UnverifiedReasonSchema = z.enum([
   "dns",
   "needs_manual_review",
   "auth_required",
+  "page_unreachable",
 ]);
 
 export const BoxSchema = z.object({
@@ -198,4 +199,28 @@ export const ReportSchema = z.object({
   pages: z.array(PageSummarySchema),
   issues: z.array(IssueSchema),
   groups: z.array(IssueGroupSchema),
+});
+
+export const VerifyOutcomeSchema = z.enum(["verified-fixed", "still-failing", "unverified"]);
+
+/** Result of re-checking one issue (TZ 6.10). `unverified` never changes an issue to fixed. */
+export const VerificationSchema = z.object({
+  issueId: z.string(),
+  outcome: VerifyOutcomeSchema,
+  detail: z.string(),
+  checkedAt: z.string().datetime(),
+  /** 0..1: how sure the re-check is (lower when the element could not be located). */
+  confidence: z.number().min(0).max(1),
+  /** The original element was not matched exactly and was found again by its signature. */
+  relocated: z.boolean().optional(),
+  /** The original element no longer exists on the page (fixed by removal, or the page changed). */
+  elementGone: z.boolean().optional(),
+  reason: UnverifiedReasonSchema.optional(),
+  pages: z.array(
+    z.object({
+      url: z.string(),
+      viewport: z.enum(["desktop", "mobile"]),
+      status: z.number().int().optional(),
+    }),
+  ),
 });

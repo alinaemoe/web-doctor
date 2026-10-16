@@ -16,6 +16,7 @@
   --sev-low: #0a409e;
   --sev-info: #3a424b;
   --on-sev: #ffffff;
+  --ok: #0a6b2e;
 
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
@@ -40,6 +41,7 @@
     --sev-low: #79c0ff;
     --sev-info: #a3acb6;
     --on-sev: #0d1117;
+    --ok: #56d364;
     color-scheme: dark;
   }
 }
@@ -60,5 +62,6 @@
   --sev-low: #79c0ff;
   --sev-info: #a3acb6;
   --on-sev: #0d1117;
+  --ok: #56d364;
   color-scheme: dark;
 }

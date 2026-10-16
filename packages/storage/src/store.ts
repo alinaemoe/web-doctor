@@ -3,10 +3,10 @@ import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { desc, eq, sql } from "drizzle-orm";
-import { ReportSchema, SCHEMA_VERSION } from "@webdoctor/core";
-import type { Issue, IssueGroup, PageSummary, Report, Run } from "@webdoctor/core";
+import { ReportSchema, SCHEMA_VERSION, VerificationSchema } from "@webdoctor/core";
+import type { Issue, IssueGroup, PageSummary, Report, Run, Verification } from "@webdoctor/core";
 import { migrate } from "./migrate";
-import { issueGroups, issues, pages, runs } from "./schema";
+import { issueGroups, issues, pages, runs, verifications } from "./schema";
 
 type IssueData = Pick<Issue, "evidence" | "explanation" | "fix" | "statusHistory">;
 
@@ -27,6 +27,11 @@ export interface Store {
   saveReport(report: Report): void;
   getReport(runId: string): Report | undefined;
   listRuns(): RunListItem[];
+  /** Persists changed issues (status and history; the heavy parts are rewritten too). */
+  updateIssues(updated: Issue[]): void;
+  addVerifications(runId: string, results: Verification[]): void;
+  /** Oldest first. */
+  listVerifications(runId: string): Verification[];
   close(): void;
 }
 
@@ -222,6 +227,50 @@ export function openStore(path: string): Store {
           unverifiedCount: counts.get(r.id)?.unverified ?? 0,
         }));
     },
+    updateIssues: (updated) => {
+      db.transaction((tx) => {
+        for (const i of updated) {
+          tx.update(issues)
+            .set({
+              status: i.status,
+              lastSeenRunId: i.lastSeenRunId,
+              data: {
+                evidence: i.evidence,
+                explanation: i.explanation,
+                fix: i.fix,
+                statusHistory: i.statusHistory,
+              } satisfies IssueData,
+            })
+            .where(eq(issues.id, i.id))
+            .run();
+        }
+      });
+    },
+    addVerifications: (runId, results) => {
+      if (results.length === 0) return;
+      db.transaction((tx) => {
+        for (const v of results) {
+          const parsed = VerificationSchema.parse(v);
+          tx.insert(verifications)
+            .values({
+              runId,
+              issueId: parsed.issueId,
+              outcome: parsed.outcome,
+              checkedAt: parsed.checkedAt,
+              data: parsed,
+            })
+            .run();
+        }
+      });
+    },
+    listVerifications: (runId) =>
+      db
+        .select()
+        .from(verifications)
+        .where(eq(verifications.runId, runId))
+        .orderBy(verifications.id)
+        .all()
+        .map((r) => VerificationSchema.parse(r.data)),
     close: () => sqlite.close(),
   };
 }

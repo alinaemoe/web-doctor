@@ -205,6 +205,9 @@ importers:
       '@webdoctor/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@webdoctor/verify':
+        specifier: workspace:*
+        version: link:../../packages/verify
       fastify:
         specifier: ^5.12.7
         version: 5.12.7
@@ -226,6 +229,9 @@ importers:
       '@webdoctor/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@webdoctor/verify':
+        specifier: workspace:*
+        version: link:../../packages/verify
       cac:
         specifier: ^7.1.0
         version: 7.1.0
@@ -245,6 +251,9 @@ importers:
       react-dom:
         specifier: ^19.3.0
         version: 19.3.0(react@19.3.0)
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@testing-library/jest-dom':
         specifier: ^7.0.1
@@ -323,6 +332,25 @@ importers:
       '@types/better-sqlite3':
         specifier: ^9.6.0
         version: 9.6.0
+
+  packages/verify:
+    dependencies:
+      '@webdoctor/core':
+        specifier: workspace:*
+        version: link:../core
+      '@webdoctor/rules':
+        specifier: workspace:*
+        version: link:../rules
+      '@webdoctor/scanner':
+        specifier: workspace:*
+        version: link:../scanner
+      '@webdoctor/storage':
+        specifier: workspace:*
+        version: link:../storage
+    devDependencies:
+      '@webdoctor/demo-site':
+        specifier: workspace:*
+        version: link:../demo-site
 
 packages:
 
