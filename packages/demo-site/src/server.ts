@@ -14,6 +14,7 @@ import {
   renderFlaky,
   renderHome,
   renderNewArrivals,
+  renderOrphan,
   renderProduct,
   renderRobots,
   renderSitemap,
@@ -122,6 +123,8 @@ export async function startDemoSite(options: DemoOptions = {}): Promise<DemoSite
         return send(req, res, 200, HTML, renderCart(ctx));
       case "/size-guide":
         return send(req, res, 200, HTML, renderSizeGuide(ctx));
+      case "/orphan":
+        return send(req, res, 200, HTML, renderOrphan(ctx));
       case "/new-arrivals":
         return send(req, res, 200, HTML, renderNewArrivals(ctx));
       case "/flaky":

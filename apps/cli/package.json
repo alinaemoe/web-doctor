@@ -15,6 +15,7 @@
     "@webdoctor/api": "workspace:*",
     "@webdoctor/core": "workspace:*",
     "@webdoctor/rules": "workspace:*",
+    "@webdoctor/runner": "workspace:*",
     "@webdoctor/scanner": "workspace:*",
     "@webdoctor/storage": "workspace:*",
     "@webdoctor/verify": "workspace:*",

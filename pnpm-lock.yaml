@@ -202,6 +202,9 @@ importers:
       '@webdoctor/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@webdoctor/runner':
+        specifier: workspace:*
+        version: link:../../packages/runner
       '@webdoctor/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -211,6 +214,9 @@ importers:
       fastify:
         specifier: ^5.12.7
         version: 5.12.7
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   apps/cli:
     dependencies:
@@ -223,6 +229,9 @@ importers:
       '@webdoctor/rules':
         specifier: workspace:*
         version: link:../../packages/rules
+      '@webdoctor/runner':
+        specifier: workspace:*
+        version: link:../../packages/runner
       '@webdoctor/scanner':
         specifier: workspace:*
         version: link:../../packages/scanner
@@ -297,6 +306,21 @@ importers:
       '@webdoctor/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/runner:
+    dependencies:
+      '@webdoctor/core':
+        specifier: workspace:*
+        version: link:../core
+      '@webdoctor/rules':
+        specifier: workspace:*
+        version: link:../rules
+      '@webdoctor/scanner':
+        specifier: workspace:*
+        version: link:../scanner
+      '@webdoctor/storage':
+        specifier: workspace:*
+        version: link:../storage
 
   packages/scanner:
     dependencies:

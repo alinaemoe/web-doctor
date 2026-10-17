@@ -20,6 +20,8 @@ export const crawlablePaths = [
   "/size-guide",
   "/new-arrivals",
   "/flaky",
+  /** Linked from nowhere: only the sitemap leads here. */
+  "/orphan",
 ];
 
 export interface RenderContext {
@@ -184,6 +186,16 @@ export function renderNewArrivals(ctx: RenderContext): string {
     description: "Fresh in the shop.",
     canonical: `${ctx.origin}/new-arrivals`,
     body: `<h1>New arrivals</h1>`,
+  });
+}
+
+export function renderOrphan(ctx: RenderContext): string {
+  return layout(ctx, {
+    title: "Outlet — Broken Shop",
+    description: "A page that only the sitemap knows about.",
+    canonical: `${ctx.origin}/orphan`,
+    body: `<h1>Outlet</h1>
+<p>Nothing links here.</p>`,
   });
 }
 

@@ -7,9 +7,10 @@ import { analyze } from "@webdoctor/rules";
 import { FsArtifactStore, SCANNER_VERSION, scan } from "@webdoctor/scanner";
 import type { ScanProgress } from "@webdoctor/scanner";
 import { openStore } from "@webdoctor/storage";
+import { toFixPrompt } from "./fixPrompt";
 import { toCsv, toHtml } from "./reports";
 
-export type ReportFormat = "json" | "csv" | "html";
+export type ReportFormat = "json" | "csv" | "html" | "md";
 
 export interface RunScanOptions {
   url: string;
@@ -22,6 +23,8 @@ export interface RunScanOptions {
   formats?: ReportFormat[];
   respectRobots?: boolean;
   timeoutMs?: number;
+  /** Cap on distinct external addresses whose links get checked (default 100). */
+  maxExternalLinks?: number;
   signal?: AbortSignal;
   onProgress?: (e: ScanProgress) => void;
 }
@@ -64,6 +67,7 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
     viewports: [...viewports],
     respectRobots: options.respectRobots,
     timeoutMs: options.timeoutMs,
+    maxExternalLinks: options.maxExternalLinks ?? 100,
     signal: options.signal,
     onProgress: options.onProgress,
   });
@@ -113,9 +117,12 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
   // Raw snapshots stay on disk so single issues can be re-verified later (Verify Fix).
   write("scan.json", JSON.stringify(result));
 
-  const formats = options.formats?.length ? options.formats : (["json", "csv", "html"] as const);
+  const formats = options.formats?.length
+    ? options.formats
+    : (["json", "csv", "html", "md"] as const);
   if (formats.includes("json")) write("report.json", JSON.stringify(report, null, 2));
   if (formats.includes("csv")) write("issues.csv", toCsv(report.issues));
+  if (formats.includes("md")) write("fix-prompt.md", toFixPrompt(report));
   if (formats.includes("html")) {
     const cache = new Map<string, Uint8Array>();
     const shots = new Map(

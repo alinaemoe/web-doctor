@@ -14,8 +14,10 @@
   "dependencies": {
     "@fastify/static": "^10.1.6",
     "@webdoctor/core": "workspace:*",
+    "@webdoctor/runner": "workspace:*",
     "@webdoctor/storage": "workspace:*",
     "@webdoctor/verify": "workspace:*",
-    "fastify": "^5.12.7"
+    "fastify": "^5.12.7",
+    "zod": "^4.6.7"
   }
 }

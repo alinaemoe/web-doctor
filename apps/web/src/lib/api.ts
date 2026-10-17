@@ -132,3 +132,49 @@ export async function verifyGroup(runId: string, groupId: string): Promise<Verif
     ),
   );
 }
+
+export const ScanJobSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  status: z.enum(["queued", "running", "completed", "failed", "canceled"]),
+  phase: z.enum(["queued", "crawling", "checking-links", "saving", "done"]),
+  pagesDone: z.number(),
+  skipped: z.number(),
+  lastUrl: z.string().optional(),
+  linkTargets: z.number().optional(),
+  runId: z.string().optional(),
+  partial: z.boolean().optional(),
+  failCount: z.number().optional(),
+  error: z.string().optional(),
+});
+export type ScanJob = z.infer<typeof ScanJobSchema>;
+
+export interface StartScanInput {
+  url: string;
+  maxPages?: number;
+  maxDepth?: number;
+  viewports?: ("desktop" | "mobile")[];
+  respectRobots?: boolean;
+}
+
+export interface ScanClient {
+  start: (input: StartScanInput) => Promise<ScanJob>;
+  get: (id: string) => Promise<ScanJob>;
+  cancel: (id: string) => Promise<ScanJob>;
+}
+
+export const scanClient: ScanClient = {
+  start: async (input) => ScanJobSchema.parse(await post("/api/scans", input)),
+  get: async (id) => ScanJobSchema.parse(await get(`/api/scans/${encodeURIComponent(id)}`)),
+  cancel: async (id) =>
+    ScanJobSchema.parse(await post(`/api/scans/${encodeURIComponent(id)}/cancel`)),
+};
+
+/** The Markdown task for an AI coding agent (the body is plain text, not JSON). */
+export async function fetchFixPrompt(runId: string): Promise<string> {
+  const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/fix-prompt.md`, {
+    headers: { "x-webdoctor-token": token ?? "" },
+  });
+  if (!res.ok) throw new ApiError(`Could not create the fix prompt (${res.status})`, res.status);
+  return res.text();
+}

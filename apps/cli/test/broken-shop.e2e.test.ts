@@ -7,8 +7,8 @@ import type { Report } from "@webdoctor/core";
 import { expectedManifest, matchExpected, startDemoSite } from "@webdoctor/demo-site";
 import type { DemoSite } from "@webdoctor/demo-site";
 import { openStore } from "@webdoctor/storage";
-import { runScan } from "../src/runScan";
-import type { RunScanResult } from "../src/runScan";
+import { runScan } from "@webdoctor/runner";
+import type { RunScanResult } from "@webdoctor/runner";
 
 /** Full pipeline against Broken Shop: crawl, rules, storage, reports (needs Chromium). */
 const outDir = mkdtempSync(join(tmpdir(), "wd-e2e-"));
@@ -42,9 +42,13 @@ describe("Broken Shop, broken mode", () => {
     expect(result.unexpected.map((i) => `${i.ruleId} ${i.pageUrl}`)).toEqual([]);
   });
 
+  it("finds a page that only the sitemap links to", () => {
+    expect(crawledPaths(broken.report)).toContain("/orphan");
+  });
+
   it("crawls all pages on both viewports and is not partial", () => {
-    expect(crawledPaths(broken.report)).toHaveLength(27);
-    expect(broken.report.pages).toHaveLength(54);
+    expect(crawledPaths(broken.report)).toHaveLength(28);
+    expect(broken.report.pages).toHaveLength(56);
     expect(broken.report.run.partial).toBe(false);
   });
 

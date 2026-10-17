@@ -773,3 +773,64 @@ code.inline {
   background: color-mix(in srgb, var(--accent) 14%, var(--bg));
   border-bottom: 1px solid var(--line-strong);
 }
+
+/* ---- new scan ---- */
+.new-scan {
+  max-width: 720px;
+}
+.scan-form {
+  display: grid;
+  gap: 16px;
+}
+.field {
+  display: grid;
+  gap: 4px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.field > span,
+.field > legend {
+  font-weight: 600;
+}
+.input-big {
+  font-size: 18px;
+  padding: 10px 12px;
+}
+.btn-big {
+  justify-self: start;
+  font-size: 16px;
+  padding: 8px 20px;
+}
+.options-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 10px 0;
+}
+.scan-card {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
+a.btn {
+  text-decoration: none;
+  display: inline-block;
+}
+.fix-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 700px) {
+  .options-grid {
+    grid-template-columns: 1fr;
+  }
+  .fix-prompt .muted {
+    display: none;
+  }
+}

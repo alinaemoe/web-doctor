@@ -5,6 +5,9 @@ import { extname, join, resolve, sep } from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { toFixPrompt } from "@webdoctor/runner";
+import { ScanManager, StartScanSchema } from "./scans";
+import type { ScanFn } from "./scans";
 import { openStore } from "@webdoctor/storage";
 import type { Store } from "@webdoctor/storage";
 import { VerifyInputError, verifyAndSave, verifyGroupAndSave } from "@webdoctor/verify";
@@ -34,6 +37,8 @@ export interface ApiOptions {
   webDir?: string;
   logger?: boolean;
   verifier?: Verifier;
+  /** Test seam for scans started from the UI. */
+  scanRunner?: ScanFn;
 }
 
 const RUN_ID = /^[\w-]{1,100}$/;
@@ -90,9 +95,58 @@ export async function createApiServer(options: ApiOptions): Promise<FastifyInsta
 
   app.get("/api/runs", async () => store.listRuns());
 
+  app.get<{ Params: { id: string }; Querystring: { includeFixed?: string; maxIssues?: string } }>(
+    "/api/runs/:id/fix-prompt.md",
+    async (req, reply) => {
+      if (!RUN_ID.test(req.params.id)) return reply.code(400).send({ error: "bad run id" });
+      const report = store.getReport(req.params.id);
+      if (!report) return reply.code(404).send({ error: "run not found" });
+      const maxIssues = Number(req.query.maxIssues);
+      const md = toFixPrompt(report, {
+        includeFixed: req.query.includeFixed === "1",
+        maxIssues:
+          Number.isFinite(maxIssues) && maxIssues > 0 ? Math.min(maxIssues, 500) : undefined,
+      });
+      return reply
+        .header("content-type", "text/markdown; charset=utf-8")
+        .header("content-disposition", `attachment; filename="fix-prompt-${req.params.id}.md"`)
+        .send(md);
+    },
+  );
+
   app.get<{ Params: { id: string } }>("/api/runs/:id/verifications", async (req, reply) => {
     if (!RUN_ID.test(req.params.id)) return reply.code(400).send({ error: "bad run id" });
     return store.listVerifications(req.params.id);
+  });
+
+  // ---- Scans started from the UI (local mode: any http(s) address, including localhost) ----
+  const scans = new ScanManager({ dataDir, run: options.scanRunner });
+
+  app.post("/api/scans", async (req, reply) => {
+    const parsed = StartScanSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? "Invalid scan settings";
+      return reply.code(400).send({ error: message });
+    }
+    const job = scans.start(parsed.data);
+    if (job === "busy") {
+      return reply
+        .code(429)
+        .send({ error: "Too many scans waiting. Try again when one has finished." });
+    }
+    return reply.code(202).send(job);
+  });
+
+  app.get("/api/scans", async () => scans.list());
+
+  app.get<{ Params: { id: string } }>("/api/scans/:id", async (req, reply) => {
+    const job = scans.get(req.params.id);
+    return job ?? reply.code(404).send({ error: "scan not found" });
+  });
+
+  app.post<{ Params: { id: string } }>("/api/scans/:id/cancel", async (req, reply) => {
+    const job = scans.cancel(req.params.id);
+    return job ?? reply.code(404).send({ error: "scan not found" });
   });
 
   // ---- Verify Fix ----

@@ -125,6 +125,8 @@ export interface LinkCheck {
   tooManyHops: boolean;
   error?: LinkCheckError;
   errorText?: string;
+  /** The plain request failed, but a real browser loaded it fine (the site blocks scripts). */
+  viaBrowser?: boolean;
 }
 
 export interface SkippedUrl {

@@ -1,8 +1,10 @@
-export type Route = { name: "runs" } | { name: "run"; id: string; issue?: string };
+export type Route =
+  { name: "runs" } | { name: "new" } | { name: "run"; id: string; issue?: string };
 
 /** `#/` -> runs list, `#/runs/<id>?issue=<issueId>` -> inspector. */
 export function parseHash(hash: string): Route {
   const [path = "", query = ""] = hash.replace(/^#/, "").split("?");
+  if (path === "/new") return { name: "new" };
   const match = /^\/runs\/([^/]+)$/.exec(path);
   if (!match) return { name: "runs" };
   const issue = new URLSearchParams(query).get("issue") ?? undefined;

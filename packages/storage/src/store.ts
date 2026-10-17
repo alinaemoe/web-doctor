@@ -40,6 +40,8 @@ export function openStore(path: string): Store {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const sqlite = new Database(path);
   sqlite.pragma("journal_mode = WAL");
+  // The CLI, the API server and a running scan can all write the same file.
+  sqlite.pragma("busy_timeout = 5000");
   migrate(sqlite);
   const db = drizzle(sqlite);
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cac } from "cac";
@@ -8,8 +8,8 @@ import { createApiServer } from "@webdoctor/api";
 import { openStore } from "@webdoctor/storage";
 import { verifyAndSave } from "@webdoctor/verify";
 import type { Category, ScanViewport, Severity } from "@webdoctor/core";
-import { ALL_CATEGORIES, SEVERITY_RANK, runScan } from "./runScan";
-import type { ReportFormat } from "./runScan";
+import { ALL_CATEGORIES, SEVERITY_RANK, runScan, toFixPrompt } from "@webdoctor/runner";
+import type { ReportFormat } from "@webdoctor/runner";
 
 const EXIT = { ok: 0, issues: 1, usage: 2, partial: 3 } as const;
 
@@ -44,9 +44,12 @@ cli
   .option("--depth <n>", "Maximum crawl depth", { default: 3 })
   .option("--viewport <list>", "desktop,mobile", { default: "desktop,mobile" })
   .option("--categories <list>", "links,a11y,seo,runtime", { default: "links,a11y,seo,runtime" })
-  .option("--format <list>", "json,csv,html", { default: "json,csv,html" })
+  .option("--format <list>", "json,csv,html,md (md = fix prompt for an AI agent)", {
+    default: "json,csv,html,md",
+  })
   .option("--out <dir>", "Output directory", { default: ".webdoctor" })
   .option("--timeout <seconds>", "Total time budget", { default: 600 })
+  .option("--max-external <n>", "Max external addresses to check links of", { default: 100 })
   .option("--ignore-robots", "Do not obey robots.txt (only for sites you own)")
   .option("--ci", "Machine-friendly output")
   .option("--fail-on <severity>", "Exit with 1 if a failing issue has at least this severity")
@@ -62,8 +65,9 @@ cli
       return mapped;
     });
     const formats = list(String(flags.format)) as ReportFormat[];
-    if (formats.some((f) => !["json", "csv", "html"].includes(f)))
-      fail("--format: json, csv, html");
+    if (formats.some((f) => !["json", "csv", "html", "md"].includes(f))) {
+      fail("--format: json, csv, html, md");
+    }
     const failOn = flags.failOn as Severity | undefined;
     if (failOn && !(failOn in SEVERITY_RANK)) fail("--fail-on: critical, high, medium, low, info");
     const num = (v: unknown, name: string) => {
@@ -91,6 +95,7 @@ cli
         formats,
         respectRobots: !flags.ignoreRobots,
         timeoutMs: num(flags.timeout, "--timeout") * 1000,
+        maxExternalLinks: num(flags.maxExternal, "--max-external"),
         signal: controller.signal,
         onProgress: (e) => {
           if (quiet) return;
@@ -115,6 +120,8 @@ cli
       `Issues: ${failing.length} (${counts}); ${unverified} couldn't be verified; ${report.groups.length} root-cause groups`,
     );
     console.log(`Reports: ${runDir}`);
+    if (formats.includes("md"))
+      console.log(`Fix prompt for an AI agent: ${join(runDir, "fix-prompt.md")}`);
 
     if (failOn && failing.some((i) => SEVERITY_RANK[i.severity] >= SEVERITY_RANK[failOn])) {
       process.exit(EXIT.issues);
@@ -192,6 +199,37 @@ cli
             ? EXIT.issues
             : EXIT.partial,
       );
+    } finally {
+      store.close();
+    }
+  });
+
+cli
+  .command(
+    "export [runId]",
+    "Write the fix prompt (Markdown for an AI coding agent) of a saved run",
+  )
+  .option("--dir <dir>", "Directory with scan results", { default: ".webdoctor" })
+  .option("--out <file>", "Write to this file instead of stdout")
+  .option("--max-issues <n>", "Cap on individual problems listed", { default: 60 })
+  .option("--include-fixed", "Also mention problems already verified as fixed")
+  .action((runId: string | undefined, flags: Record<string, unknown>) => {
+    const store = openStore(join(resolve(String(flags.dir)), "webdoctor.db"));
+    try {
+      const id = runId ?? store.listRuns()[0]?.id;
+      if (!id) fail("no runs found; run `webdoctor scan <url>` first");
+      const report = store.getReport(id);
+      if (!report) fail(`run ${id} not found`);
+      const md = toFixPrompt(report, {
+        maxIssues: Number(flags.maxIssues),
+        includeFixed: Boolean(flags.includeFixed),
+      });
+      if (typeof flags.out === "string") {
+        writeFileSync(resolve(flags.out), md);
+        console.error(`wrote ${resolve(flags.out)}`);
+      } else {
+        process.stdout.write(md);
+      }
     } finally {
       store.close();
     }

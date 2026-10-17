@@ -3,8 +3,9 @@
 A visual debugging workspace for websites: find a problem, see it on the real page, understand it,
 fix it, **re-verify** it, and track it over time. See [TZ.md](TZ.md) for the full specification.
 
-> Status: **M3 — Verify Fix.** Scan, inspect, fix, then re-check a single issue or a sample of a root-cause
-> group and see whether it is really fixed. Run history and Regression Radar (M4) are next.
+> Status: **M3+ — scan from the UI, sitemap discovery, AI fix prompt.** Paste an address, get a
+> crawled report, re-verify fixes, and export a Markdown task for an AI coding agent. Run history and
+> Regression Radar (M4) are next.
 
 ## Layout
 
@@ -38,6 +39,31 @@ Results go to `.webdoctor/`: `webdoctor.db` (SQLite) and `runs/<runId>/` with `r
 `issues.csv`, `report.html`, `scan.json` (raw snapshots) and WebP screenshots.
 Exit codes: `0` ok, `1` issues at/above `--fail-on`, `2` usage error, `3` partial result.
 Options: `--max-pages --depth --viewport --categories --format --out --timeout --ignore-robots --ci`.
+
+## Scan a real site
+
+Give the main address only. Pages are found from links **and** from `sitemap.xml` (sitemap indexes are
+expanded; robots.txt is obeyed). External links that fail for a script are re-checked in a real browser
+before they are reported.
+
+```bash
+pnpm webdoctor scan https://your-site.com --max-pages 100
+```
+
+or press **New scan** in the inspector (`pnpm webdoctor ui`) and paste the address.
+
+## Fix prompt for an AI agent
+
+Every scan writes `fix-prompt.md`: a Markdown task for an AI coding agent listing root causes first,
+then single problems, each with where it is, how to fix it, example code, a "done when" condition and
+the `verify` command. Text copied from the scanned site is fenced and labelled as data, so a hostile
+page cannot talk to your agent.
+
+```bash
+pnpm webdoctor export > task.md      # newest run (also: --out task.md --max-issues 40)
+```
+
+In the inspector use **Copy fix prompt** / **Download .md** at the top.
 
 ## Inspect the results
 

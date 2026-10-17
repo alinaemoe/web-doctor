@@ -9,8 +9,10 @@ import type {
 } from "@webdoctor/core";
 import type { ArtifactStore } from "./artifacts";
 import { collectPage } from "./collect";
+import { confirmInBrowser, needsBrowserConfirmation } from "./confirm";
 import { checkLink, checkLinks, fetchText } from "./linkCheck";
-import { isAllowedByRobots, parseRobots, parseSitemapLocs } from "./robots";
+import { isAllowedByRobots, parseRobots } from "./robots";
+import { expandSitemap } from "./sitemap";
 
 export const SCANNER_VERSION = "0.0.0";
 
@@ -36,6 +38,8 @@ export interface ScanOptions {
   pageTimeoutMs?: number;
   /** Cap on distinct external URLs that get checked. */
   maxExternalLinks?: number;
+  /** Visit pages listed in sitemap.xml too (default true). */
+  useSitemap?: boolean;
   signal?: AbortSignal;
   userAgent?: string;
   onProgress?: (event: ScanProgress) => void;
@@ -83,14 +87,31 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   const robotsRules = parseRobots(robots.text);
   const sitemapUrl = robotsRules.sitemaps[0] ?? `${origin}/sitemap.xml`;
   const sitemapRes = await fetchText(sitemapUrl, checkOpts);
+  // Pages listed in the sitemap (a sitemap index is expanded one level): the crawler visits them
+  // even when no link on the site leads there.
+  const useSitemap = options.useSitemap ?? true;
+  const sitemapLocs = await expandSitemap(sitemapRes.text, (url) => fetchText(url, checkOpts));
 
   const linkChecks = new Map<string, LinkCheck>();
   const pages: PageSnapshot[] = [];
   const skipped: SkippedUrl[] = [];
+  let droppedByLimit = false;
   const queue: QueueItem[] = [{ url: start, depth: 0 }];
   const claimed = new Set<string>([start]);
+  if (useSitemap && maxDepth >= 1) {
+    for (const loc of sitemapLocs) {
+      const url = normalizeUrl(loc);
+      if (!url || claimed.has(url) || !isSameOrigin(url, origin)) continue;
+      if (ASSET_EXT.test(new URL(url).pathname)) continue;
+      if (claimed.size >= maxPages) {
+        droppedByLimit = true;
+        break;
+      }
+      claimed.add(url);
+      queue.push({ url, depth: 1 });
+    }
+  }
   let visitedCount = 0;
-  let droppedByLimit = false;
   let active = 0;
 
   const skip = (url: string, reason: SkippedUrl["reason"], detail?: string) => {
@@ -200,13 +221,19 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     for (const link of page.links) addTarget(link.href);
     if (page.canonical) addTarget(page.canonical, page.finalUrl);
   }
-  const sitemapLocs = parseSitemapLocs(sitemapRes.text);
   for (const loc of sitemapLocs.slice(0, 500)) addTarget(loc);
 
   const external = [...externalTargets].slice(0, options.maxExternalLinks ?? 200);
   const allTargets = [...internalTargets, ...external];
   options.onProgress?.({ type: "links", total: allTargets.length });
   await checkLinks(allTargets, linkChecks, { ...checkOpts, signal: options.signal });
+
+  // A site that blocks scripts can answer 403/404 to a link a visitor opens without trouble.
+  // Re-check such external links in a real browser before they can be reported as broken.
+  const suspicious = external.filter((u) => needsBrowserConfirmation(linkChecks.get(u)));
+  if (suspicious.length > 0 && !options.signal?.aborted) {
+    await confirmInBrowser(linkChecks, suspicious.slice(0, 15), { signal: options.signal });
+  }
 
   const droppedPartial = droppedByLimit && !stopReason;
   return {

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Report, Verification } from "@webdoctor/core/shared";
+import { FixPromptButtons } from "./components/FixPromptButtons";
+import { NewScanPage } from "./components/NewScanPage";
 import { RunWorkspace } from "./components/RunWorkspace";
 import { RunsPage } from "./components/RunsPage";
 import { fetchReport, fetchRuns, fetchVerifications, initToken } from "./lib/api";
@@ -109,11 +111,17 @@ export function App() {
         <a className="brand" href="#/">
           {t.appName}
         </a>
-        {route.name === "run" && (
+        {route.name !== "runs" && (
           <a className="crumb" href="#/">
             ← {t.back}
           </a>
         )}
+        {route.name === "runs" || route.name === "run" ? (
+          <a className="btn" href="#/new">
+            {t.newScan}
+          </a>
+        ) : null}
+        {route.name === "run" && <FixPromptButtons runId={route.id} />}
         <span className="spacer" />
         <span className="muted small kbd-hint">j / k — next / previous issue</span>
         <button type="button" className="btn" onClick={cycle} aria-label={`${t.theme}: ${theme}`}>
@@ -124,6 +132,8 @@ export function App() {
         <p className="empty page-pad" role="alert">
           Open the link printed by `webdoctor ui` (it contains the access token).
         </p>
+      ) : route.name === "new" ? (
+        <NewScanPage />
       ) : route.name === "runs" ? (
         runs.state === "ok" ? (
           <RunsPage runs={runs.data} />

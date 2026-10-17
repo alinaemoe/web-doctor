@@ -3,7 +3,13 @@ import { runHash } from "../lib/route";
 import { t } from "../lib/strings";
 
 export function RunsPage({ runs }: { runs: RunListItem[] }) {
-  if (runs.length === 0) return <p className="empty page-pad">{t.noRuns}</p>;
+  if (runs.length === 0) {
+    return (
+      <p className="empty page-pad">
+        {t.noRuns} Or <a href="#/new">start a scan here</a>.
+      </p>
+    );
+  }
   return (
     <div className="page-pad">
       <h1>{t.runs}</h1>
