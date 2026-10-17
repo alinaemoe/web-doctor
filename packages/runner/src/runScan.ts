@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, writeFileSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ReportSchema, SCHEMA_VERSION } from "@webdoctor/core";
 import type { Category, Report, ScanViewport, Severity } from "@webdoctor/core";
@@ -115,7 +115,17 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
   };
 
   // Raw snapshots stay on disk so single issues can be re-verified later (Verify Fix).
-  write("scan.json", JSON.stringify(result));
+  // One JSON line per page: a scan of thousands of pages must not become one giant string.
+  const { pages: snapshots, ...scanMeta } = result;
+  write("scan.json", JSON.stringify(scanMeta));
+  const pagesFile = join(runDir, "pages.ndjson");
+  const fd = openSync(pagesFile, "w");
+  try {
+    for (const page of snapshots) writeSync(fd, JSON.stringify(page) + "\n");
+  } finally {
+    closeSync(fd);
+  }
+  files.push(pagesFile);
 
   const formats = options.formats?.length
     ? options.formats

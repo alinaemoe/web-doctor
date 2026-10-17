@@ -246,11 +246,17 @@ export async function collectPage(
       }
 
     // Redirect hops show up as their own 3xx responses; the final request carries the chain.
+    const MAX_NETWORK_ENTRIES = 800;
     const network = requests
       .map((r) => r.entry)
-      .filter(
-        (e) => e.errorText || (e.status !== undefined && (e.status < 300 || e.status >= 400)),
-      );
+      .filter((e) => e.errorText || (e.status !== undefined && (e.status < 300 || e.status >= 400)))
+      // failures first, so the cap never hides a problem
+      .sort(
+        (a, b) =>
+          Number(Boolean(b.errorText || (b.status ?? 0) >= 400)) -
+          Number(Boolean(a.errorText || (a.status ?? 0) >= 400)),
+      )
+      .slice(0, MAX_NETWORK_ENTRIES);
 
     return {
       ok: true,

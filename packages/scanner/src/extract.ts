@@ -98,17 +98,21 @@ export function extractInPage(): PageExtract {
   const meta = (name: string) =>
     document.querySelector(`meta[name="${name}" i]`)?.getAttribute("content") ?? null;
 
-  const images: ImageInfo[] = Array.from(document.querySelectorAll("img")).map((img) => ({
-    ...infoOf(img),
-    src: img.currentSrc || img.src,
-    hasAltAttr: img.hasAttribute("alt"),
-    hasWidthAttr: img.hasAttribute("width"),
-    hasHeightAttr: img.hasAttribute("height"),
-    naturalWidth: img.naturalWidth,
-    complete: img.complete,
-  }));
+  // Per-page caps keep memory bounded on huge pages and on scans of thousands of pages.
+  const images: ImageInfo[] = Array.from(document.querySelectorAll("img"))
+    .slice(0, 500)
+    .map((img) => ({
+      ...infoOf(img),
+      src: img.currentSrc || img.src,
+      hasAltAttr: img.hasAttribute("alt"),
+      hasWidthAttr: img.hasAttribute("width"),
+      hasHeightAttr: img.hasAttribute("height"),
+      naturalWidth: img.naturalWidth,
+      complete: img.complete,
+    }));
 
   const links: LinkInfo[] = Array.from(document.querySelectorAll("a[href]"))
+    .slice(0, 1500)
     .map((a) => ({
       ...infoOf(a),
       href: (a as HTMLAnchorElement).href,

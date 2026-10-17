@@ -82,6 +82,10 @@ describe("Broken Shop, broken mode", () => {
     for (const name of ["report.json", "issues.csv", "report.html", "scan.json"]) {
       expect(existsSync(join(broken.runDir, name)), name).toBe(true);
     }
+    // snapshots are streamed one JSON object per line, so huge scans never build one giant string
+    const lines = readFileSync(join(broken.runDir, "pages.ndjson"), "utf8").trim().split("\n");
+    expect(lines).toHaveLength(broken.report.pages.length);
+    expect(JSON.parse(lines[0]!)).toMatchObject({ status: 200 });
     const json = JSON.parse(readFileSync(join(broken.runDir, "report.json"), "utf8"));
     expect(ReportSchema.safeParse(json).success).toBe(true);
     const shot = broken.report.pages.find((p) => p.screenshotKey)!;

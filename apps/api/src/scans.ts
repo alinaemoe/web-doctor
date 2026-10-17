@@ -3,6 +3,18 @@ import { z } from "zod";
 import { runScan } from "@webdoctor/runner";
 import type { RunScanOptions, RunScanResult } from "@webdoctor/runner";
 
+/** Upper bound for one scan started from the UI. */
+export const MAX_SCAN_PAGES = 5000;
+
+/**
+ * Time budget for a scan: about 4 s per page and viewport (the crawl is parallel but pages vary),
+ * at least 10 minutes and at most 4 hours, so a runaway scan cannot go on forever.
+ */
+export function scanTimeoutMs(maxPages: number, viewports: number): number {
+  const ms = maxPages * viewports * 4000;
+  return Math.min(4 * 3600_000, Math.max(600_000, ms));
+}
+
 /** Body of `POST /api/scans`. Everything but `url` is optional. */
 export const StartScanSchema = z.object({
   url: z
@@ -17,7 +29,7 @@ export const StartScanSchema = z.object({
         return false;
       }
     }, "Enter a full http(s) address, for example https://example.com"),
-  maxPages: z.number().int().min(1).max(500).default(50),
+  maxPages: z.number().int().min(1).max(MAX_SCAN_PAGES).default(50),
   maxDepth: z.number().int().min(0).max(6).default(3),
   viewports: z
     .array(z.enum(["desktop", "mobile"]))
@@ -44,6 +56,10 @@ export interface ScanJob {
   /** URLs that were not scanned (dead links, robots.txt, other sites). */
   skipped: number;
   lastUrl?: string;
+  /** The most recent pages, newest first (for a live feed). */
+  recent: string[];
+  /** Pages found and waiting to be scanned. */
+  queued: number;
   /** Link targets being checked in the last phase. */
   linkTargets?: number;
   runId?: string;
@@ -93,6 +109,8 @@ export class ScanManager {
         createdAt: new Date().toISOString(),
         pagesDone: 0,
         skipped: 0,
+        recent: [],
+        queued: 0,
       },
       input,
       controller: new AbortController(),
@@ -150,12 +168,15 @@ export class ScanManager {
         maxDepth: j.input.maxDepth,
         viewports: j.input.viewports,
         respectRobots: j.input.respectRobots,
+        timeoutMs: scanTimeoutMs(j.input.maxPages, j.input.viewports.length),
         signal: j.controller.signal,
         onProgress: (e) => {
           if (e.type === "page") {
+            if (!j.pages.has(e.url)) j.job.recent = [e.url, ...j.job.recent].slice(0, 8);
             j.pages.add(e.url);
             j.job.pagesDone = j.pages.size;
             j.job.lastUrl = e.url;
+            j.job.queued = e.queued;
           } else if (e.type === "skipped") {
             j.job.skipped++;
           } else if (e.type === "links") {

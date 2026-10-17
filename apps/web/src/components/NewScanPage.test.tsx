@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ScanClient, ScanJob } from "../lib/api";
 import { parseHash } from "../lib/route";
 import { FixPromptButtons } from "./FixPromptButtons";
+import { BIG_SCAN_PAGES, formatElapsed, linesFor } from "../lib/scanFun";
 import { NewScanPage, normalizeAddress } from "./NewScanPage";
 
 const job = (overrides: Partial<ScanJob> = {}): ScanJob => ({
@@ -13,6 +14,8 @@ const job = (overrides: Partial<ScanJob> = {}): ScanJob => ({
   phase: "crawling",
   pagesDone: 0,
   skipped: 0,
+  recent: [],
+  queued: 0,
   ...overrides,
 });
 
@@ -41,7 +44,13 @@ describe("NewScanPage", () => {
   it("scans the typed address with the chosen options and shows progress, then the result link", async () => {
     const user = userEvent.setup();
     const client = makeClient([
-      job({ pagesDone: 3, lastUrl: "https://example.com/about", skipped: 1 }),
+      job({
+        pagesDone: 3,
+        lastUrl: "https://example.com/about",
+        recent: ["https://example.com/about", "https://example.com/"],
+        queued: 9,
+        skipped: 1,
+      }),
       job({ phase: "checking-links", linkTargets: 12, pagesDone: 5 }),
       job({
         status: "completed",
@@ -70,8 +79,10 @@ describe("NewScanPage", () => {
     });
 
     await screen.findByText(/Scanning… 3 pages done/);
+    // live feed of the latest pages and the stat cards
     expect(screen.getByText("https://example.com/about")).toBeInTheDocument();
-    expect(screen.getByText(/1 addresses skipped/)).toBeInTheDocument();
+    expect(screen.getByText("found, waiting").previousSibling).toHaveTextContent("9");
+    expect(screen.getByText("skipped").previousSibling).toHaveTextContent("1");
     await screen.findByText(/Checking 12 links/);
 
     const done = await screen.findByText(/Done\. 5 pages scanned, 7 problems found\./);
@@ -137,6 +148,91 @@ describe("NewScanPage", () => {
     await user.click(screen.getByRole("button", { name: "Scan site" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Choose at least one viewport.");
     expect(client.start).not.toHaveBeenCalled();
+  });
+});
+
+describe("live scan screen", () => {
+  it("shows a rotating line while scanning and keeps it out of the accessibility tree", async () => {
+    const user = userEvent.setup();
+    const client = makeClient([job({ pagesDone: 1 })]);
+    render(<NewScanPage client={client} pollMs={1000} funMs={30} />);
+    await user.type(screen.getByLabelText(/Website address/), "example.com");
+    await user.click(screen.getByRole("button", { name: "Scan site" }));
+
+    const line = await screen.findByTestId("fun-line");
+    expect(line).toHaveAttribute("aria-hidden", "true");
+    const seen = new Set<string>();
+    for (let i = 0; i < 40 && seen.size < 3; i++) {
+      seen.add(screen.getByTestId("fun-line").textContent ?? "");
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(3);
+    for (const text of seen) expect(linesFor("crawling")).toContain(text);
+  });
+
+  it("puts the progress in the tab title and restores it afterwards", async () => {
+    const user = userEvent.setup();
+    document.title = "Web Doctor";
+    const client = makeClient([
+      job({ pagesDone: 4 }),
+      job({ status: "completed", phase: "done", pagesDone: 4, runId: "r", failCount: 2 }),
+    ]);
+    render(<NewScanPage client={client} pollMs={20} />);
+    await user.type(screen.getByLabelText(/Website address/), "example.com");
+    await user.click(screen.getByRole("button", { name: "Scan site" }));
+
+    await waitFor(() => expect(document.title).toBe("Done · 2 problems · Web Doctor"));
+  });
+});
+
+describe("scan presets and limits", () => {
+  it("offers presets up to 5000 pages and warns before a huge scan", async () => {
+    const user = userEvent.setup();
+    const client = makeClient([job()]);
+    render(<NewScanPage client={client} />);
+
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Quick · 10" }));
+    expect(screen.getByRole("button", { name: "Quick · 10" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Everything · 5000" }));
+    expect(screen.getByRole("note")).toHaveTextContent(/hour or more/);
+    await user.type(screen.getByLabelText(/Website address/), "example.com");
+    await user.click(screen.getByRole("button", { name: "Scan site" }));
+    expect(client.start).toHaveBeenCalledWith(expect.objectContaining({ maxPages: 5000 }));
+    expect(BIG_SCAN_PAGES).toBeLessThan(5000);
+  });
+
+  it("remembers the last scanned address", async () => {
+    window.localStorage.removeItem("webdoctor.lastAddress");
+    const user = userEvent.setup();
+    const first = render(<NewScanPage client={makeClient([job()])} />);
+    await user.type(screen.getByLabelText(/Website address/), "my-site.example");
+    await user.click(screen.getByRole("button", { name: "Scan site" }));
+    first.unmount();
+
+    render(<NewScanPage client={makeClient([job()])} />);
+    expect(screen.getByLabelText(/Website address/)).toHaveValue("my-site.example");
+  });
+});
+
+describe("scanFun helpers", () => {
+  it("formats elapsed time", () => {
+    expect(formatElapsed(0)).toBe("0:00");
+    expect(formatElapsed(65_000)).toBe("1:05");
+    expect(formatElapsed(3_725_000)).toBe("1:02:05");
+    expect(formatElapsed(-5)).toBe("0:00");
+  });
+
+  it("has phase-specific lines, with a tip after every few jokes", () => {
+    expect(
+      linesFor("crawling").some((l) => l.startsWith("Tip:") || l.startsWith("Did you know")),
+    ).toBe(true);
+    expect(linesFor("checking-links")[0]).toMatch(/link/i);
+    expect(new Set(linesFor("crawling")).size).toBe(linesFor("crawling").length);
   });
 });
 

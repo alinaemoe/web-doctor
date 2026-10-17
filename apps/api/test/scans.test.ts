@@ -7,6 +7,7 @@ import type { Report } from "@webdoctor/core";
 import type { RunScanOptions, RunScanResult } from "@webdoctor/runner";
 import type { FastifyInstance } from "fastify";
 import { createApiServer } from "../src/server";
+import { MAX_SCAN_PAGES, scanTimeoutMs } from "../src/scans";
 
 const TOKEN = "t";
 const auth = { "x-webdoctor-token": TOKEN };
@@ -197,5 +198,36 @@ describe("GET /api/runs/:id/fix-prompt.md", () => {
   it("is 404 for a run that does not exist and needs the token", async () => {
     expect((await get("/api/runs/none/fix-prompt.md")).statusCode).toBe(404);
     expect((await app.inject("/api/runs/none/fix-prompt.md")).statusCode).toBe(401);
+  });
+});
+
+describe("scan limits", () => {
+  it("accepts up to 5000 pages and refuses more", async () => {
+    expect(MAX_SCAN_PAGES).toBe(5000);
+    expect((await post("/api/scans", { url: "https://a.test/", maxPages: 5001 })).statusCode).toBe(
+      400,
+    );
+    const ok = await post("/api/scans", { url: "https://a.test/big", maxPages: 5000 });
+    expect(ok.statusCode).toBe(202);
+    await until(ok.json().id, (s) => s === "completed");
+    expect(calls.at(-1)).toMatchObject({ url: "https://a.test/big", maxPages: 5000 });
+  });
+
+  it("gives a big scan a proportionate time budget, within sane bounds", () => {
+    expect(scanTimeoutMs(10, 2)).toBe(10 * 60_000); // never less than 10 minutes
+    expect(scanTimeoutMs(500, 2)).toBe(500 * 2 * 4000);
+    expect(scanTimeoutMs(5000, 2)).toBe(4 * 3600_000); // never more than 4 hours
+    expect(calls.at(-1)!.timeoutMs).toBe(4 * 3600_000);
+  });
+
+  it("reports the latest pages (newest first) and the queue size for the live view", async () => {
+    const started = (await post("/api/scans", { url: "https://hold.test/live" })).json();
+    await until(started.id, (s) => s === "running");
+    const job = (await get(`/api/scans/${started.id}`)).json();
+    expect(job.recent).toEqual(["https://hold.test/livea"]);
+    expect(job.queued).toBe(2);
+    expect(job.startedAt).toBeDefined();
+    release?.();
+    await until(started.id, (s) => s === "completed");
   });
 });
