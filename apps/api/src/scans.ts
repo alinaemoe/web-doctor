@@ -70,8 +70,15 @@ export interface ScanJob {
 
 export type ScanFn = (options: RunScanOptions) => Promise<RunScanResult>;
 
+/** Per-scan extras supplied by the server (public mode: a network guard for this scan). */
+export interface ScanContext {
+  extra: Partial<RunScanOptions>;
+  dispose(): Promise<void>;
+}
+
 interface Internal {
   job: ScanJob;
+  owner?: string;
   input: StartScanInput;
   controller: AbortController;
   pages: Set<string>;
@@ -94,10 +101,23 @@ export class ScanManager {
       run?: ScanFn;
       /** Scans allowed to wait behind the running one. */
       maxQueued?: number;
+      /** Called right before a scan runs; its `extra` options are merged in. */
+      prepare?: (owner: string | undefined) => Promise<ScanContext>;
+      /** Replaces the default time budget. */
+      timeoutMs?: (input: StartScanInput) => number;
+      /** Turns a failure into the text shown to the user (public mode hides internals). */
+      describeError?: (error: unknown) => string;
     },
   ) {}
 
-  start(input: StartScanInput): ScanJob | "busy" {
+  /** Scans of this owner that are waiting or running. */
+  activeFor(owner: string | undefined): number {
+    return [...this.jobs.values()].filter(
+      (j) => j.owner === owner && (j.job.status === "queued" || j.job.status === "running"),
+    ).length;
+  }
+
+  start(input: StartScanInput, owner?: string): ScanJob | "busy" {
     if (this.waiting.length >= (this.options.maxQueued ?? 2)) return "busy";
     const id = randomUUID();
     const internal: Internal = {
@@ -112,6 +132,7 @@ export class ScanManager {
         recent: [],
         queued: 0,
       },
+      owner,
       input,
       controller: new AbortController(),
       pages: new Set(),
@@ -123,18 +144,27 @@ export class ScanManager {
     return { ...internal.job };
   }
 
-  get(id: string): ScanJob | undefined {
+  /** With `owner` set (public mode) a job of someone else is invisible. */
+  private visible(id: string, owner?: string): Internal | undefined {
     const j = this.jobs.get(id);
+    return j && (owner === undefined || j.owner === owner) ? j : undefined;
+  }
+
+  get(id: string, owner?: string): ScanJob | undefined {
+    const j = this.visible(id, owner);
     return j ? { ...j.job } : undefined;
   }
 
-  list(): ScanJob[] {
-    return [...this.jobs.values()].map((j) => ({ ...j.job })).reverse();
+  list(owner?: string): ScanJob[] {
+    return [...this.jobs.values()]
+      .filter((j) => owner === undefined || j.owner === owner)
+      .map((j) => ({ ...j.job }))
+      .reverse();
   }
 
   /** A queued scan is dropped; a running one stops gracefully and keeps what it has found. */
-  cancel(id: string): ScanJob | undefined {
-    const j = this.jobs.get(id);
+  cancel(id: string, owner?: string): ScanJob | undefined {
+    const j = this.visible(id, owner);
     if (!j) return undefined;
     if (j.job.status === "queued") {
       this.waiting.splice(this.waiting.indexOf(id), 1);
@@ -159,16 +189,22 @@ export class ScanManager {
     j.job.phase = "crawling";
     j.job.startedAt = new Date().toISOString();
 
+    let context: ScanContext | undefined;
     try {
+      context = await this.options.prepare?.(j.owner);
       const run = this.options.run ?? runScan;
       const result = await run({
+        ...context?.extra,
+        owner: j.owner,
         url: j.input.url,
         outDir: this.options.dataDir,
         maxPages: j.input.maxPages,
         maxDepth: j.input.maxDepth,
         viewports: j.input.viewports,
         respectRobots: j.input.respectRobots,
-        timeoutMs: scanTimeoutMs(j.input.maxPages, j.input.viewports.length),
+        timeoutMs:
+          this.options.timeoutMs?.(j.input) ??
+          scanTimeoutMs(j.input.maxPages, j.input.viewports.length),
         signal: j.controller.signal,
         onProgress: (e) => {
           if (e.type === "page") {
@@ -193,8 +229,9 @@ export class ScanManager {
       j.job.status = j.controller.signal.aborted ? "canceled" : "completed";
     } catch (error) {
       j.job.status = "failed";
-      j.job.error = (error as Error).message;
+      j.job.error = this.options.describeError?.(error) ?? (error as Error).message;
     } finally {
+      await context?.dispose().catch(() => undefined);
       j.job.phase = "done";
       j.job.finishedAt = new Date().toISOString();
       this.running = false;

@@ -1,14 +1,29 @@
 import type { LinkCheck, LinkCheckError, RedirectHop } from "@webdoctor/core";
+import { GuardError } from "@webdoctor/netguard";
+import type { GuardedFetch } from "@webdoctor/netguard";
 
 export interface LinkCheckOptions {
   timeoutMs?: number;
   maxHops?: number;
   userAgent?: string;
+  /** Replaces the global fetch; in public mode this is the guarded fetch. */
+  fetch?: GuardedFetch;
 }
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
+/** The guard's refusal, possibly wrapped by the HTTP client (`fetch failed` with a cause). */
+function guardRefusal(error: unknown): GuardError | undefined {
+  for (let e: unknown = error, depth = 0; e && depth < 4; depth++) {
+    if (e instanceof GuardError) return e;
+    e = (e as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
 function classifyError(error: unknown): { error: LinkCheckError; errorText: string } {
+  const refusal = guardRefusal(error);
+  if (refusal) return { error: "blocked", errorText: refusal.message };
   const err = error as { name?: string; message?: string; cause?: { code?: string } };
   const code = err.cause?.code;
   const text = `${err.message ?? "request failed"}${code ? ` (${code})` : ""}`;
@@ -24,7 +39,7 @@ async function request(
   method: "HEAD" | "GET",
   opts: Required<LinkCheckOptions>,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  const res = await opts.fetch(url, {
     method,
     redirect: "manual",
     signal: AbortSignal.timeout(opts.timeoutMs),
@@ -44,6 +59,7 @@ export async function checkLink(url: string, options: LinkCheckOptions = {}): Pr
     timeoutMs: options.timeoutMs ?? 8000,
     maxHops: options.maxHops ?? 10,
     userAgent: options.userAgent ?? "WebDoctor/0.0 (+link-check)",
+    fetch: options.fetch ?? (fetch as GuardedFetch),
   };
 
   const chain: RedirectHop[] = [];
@@ -133,14 +149,28 @@ export async function fetchText(
   url: string,
   options: LinkCheckOptions = {},
 ): Promise<{ url: string; status?: number; text?: string; error?: LinkCheckError }> {
+  const doFetch = options.fetch ?? (fetch as GuardedFetch);
+  const signal = AbortSignal.timeout(options.timeoutMs ?? 8000);
   try {
-    const res = await fetch(url, {
-      redirect: "follow",
-      signal: AbortSignal.timeout(options.timeoutMs ?? 8000),
-      headers: { "user-agent": options.userAgent ?? "WebDoctor/0.0 (+fetch)" },
-    });
-    const text = res.ok ? (await res.text()).slice(0, 2_000_000) : undefined;
-    return { url, status: res.status, text };
+    // redirects are followed here, one hop at a time, so each hop can be checked by the guard
+    let current = url;
+    for (let hop = 0; hop < 5; hop++) {
+      const res = await doFetch(current, {
+        redirect: "manual",
+        signal,
+        headers: { "user-agent": options.userAgent ?? "WebDoctor/0.0 (+fetch)" },
+      });
+      const location = res.headers.get("location");
+      if (REDIRECT_STATUSES.has(res.status) && location) {
+        void res.body?.cancel().catch(() => undefined);
+        current = new URL(location, current).toString();
+        continue;
+      }
+      const text = res.ok ? (await res.text()).slice(0, 2_000_000) : undefined;
+      if (!res.ok) void res.body?.cancel().catch(() => undefined);
+      return { url, status: res.status, text };
+    }
+    return { url, error: "network" };
   } catch (error) {
     return { url, error: classifyError(error).error };
   }

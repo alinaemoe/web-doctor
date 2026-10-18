@@ -4,8 +4,8 @@ import { FixPromptButtons } from "./components/FixPromptButtons";
 import { NewScanPage } from "./components/NewScanPage";
 import { RunWorkspace } from "./components/RunWorkspace";
 import { RunsPage } from "./components/RunsPage";
-import { fetchReport, fetchRuns, fetchVerifications, initToken } from "./lib/api";
-import type { RunListItem } from "./lib/api";
+import { fetchReport, fetchRuns, fetchVerifications, loadApp } from "./lib/api";
+import type { AppConfig, RunListItem } from "./lib/api";
 import { parseHash, runHash } from "./lib/route";
 import type { Route } from "./lib/route";
 import { t } from "./lib/strings";
@@ -102,8 +102,13 @@ function RunView({ id, issue }: { id: string; issue?: string }) {
 export function App() {
   const route = useRoute();
   const { theme, cycle } = useTheme();
-  const [hasToken] = useState(() => initToken() !== null);
-  const runs = useLoad<RunListItem[]>(fetchRuns, route.name === "runs" ? "runs" : "-");
+  const app = useLoad<{ config: AppConfig; authorized: boolean }>(loadApp, "app");
+  const runs = useLoad<RunListItem[]>(
+    () => (app.state === "ok" && app.data.authorized ? fetchRuns() : Promise.resolve([])),
+    route.name === "runs" && app.state === "ok" ? "runs" : "-",
+  );
+  const config = app.state === "ok" ? app.data.config : undefined;
+  const hasToken = app.state === "ok" && app.data.authorized;
 
   return (
     <div className="app">
@@ -123,17 +128,24 @@ export function App() {
         ) : null}
         {route.name === "run" && <FixPromptButtons runId={route.id} />}
         <span className="spacer" />
+        {config?.mode === "public" && <span className="muted small">Public demo</span>}
         <span className="muted small kbd-hint">j / k — next / previous issue</span>
         <button type="button" className="btn" onClick={cycle} aria-label={`${t.theme}: ${theme}`}>
           {t.theme}: {theme}
         </button>
       </header>
-      {!hasToken ? (
+      {app.state === "loading" ? (
+        <p className="empty page-pad">{t.loading}</p>
+      ) : app.state === "error" ? (
+        <p className="empty page-pad" role="alert">
+          {app.message}
+        </p>
+      ) : !hasToken ? (
         <p className="empty page-pad" role="alert">
           Open the link printed by `webdoctor ui` (it contains the access token).
         </p>
       ) : route.name === "new" ? (
-        <NewScanPage />
+        <NewScanPage config={config} />
       ) : route.name === "runs" ? (
         runs.state === "ok" ? (
           <RunsPage runs={runs.data} />
@@ -146,6 +158,11 @@ export function App() {
         )
       ) : (
         <RunView id={route.id} issue={route.issue} />
+      )}
+      {config?.mode === "public" && config.disclaimer && (
+        <footer className="muted small page-pad" role="note">
+          {config.disclaimer} Runs are deleted after {config.limits?.retentionHours ?? 24} hours.
+        </footer>
       )}
     </div>
   );

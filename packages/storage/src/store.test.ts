@@ -122,3 +122,59 @@ describe("openStore", () => {
     store.close();
   });
 });
+
+describe("owners and retention (public mode)", () => {
+  const at = (runId: string, startedAt: string): Report => {
+    const r = makeReport(runId, 1);
+    r.run.startedAt = startedAt;
+    return r;
+  };
+
+  it("keeps runs of different owners apart", () => {
+    const store = openStore(":memory:");
+    store.saveReport(at("a1", "2026-10-15T10:00:00.000Z"), "alice");
+    store.saveReport(at("b1", "2026-10-15T11:00:00.000Z"), "bob");
+    store.saveReport(at("local", "2026-10-15T12:00:00.000Z"));
+    expect(store.listRuns({ owner: "alice" }).map((r) => r.id)).toEqual(["a1"]);
+    expect(store.listRuns({ owner: "bob" }).map((r) => r.id)).toEqual(["b1"]);
+    expect(store.listRuns({ owner: "nobody" })).toEqual([]);
+    expect(store.listRuns().map((r) => r.id)).toEqual(["local", "b1", "a1"]);
+    expect(store.getRunOwner("a1")).toBe("alice");
+    expect(store.getRunOwner("local")).toBeNull();
+    expect(store.getRunOwner("missing")).toBeUndefined();
+    store.close();
+  });
+
+  it("builds history only from the same owner's runs", () => {
+    const store = openStore(":memory:");
+    store.saveReport(at("a1", "2026-10-15T10:00:00.000Z"), "alice");
+    store.saveReport(at("b1", "2026-10-15T11:00:00.000Z"), "bob");
+    const url = "http://localhost:4000/";
+    expect(store.findPreviousRun(url, "2026-10-16T00:00:00.000Z", "alice")?.id).toBe("a1");
+    expect(store.findPreviousRun(url, "2026-10-16T00:00:00.000Z", "carol")).toBeUndefined();
+    store.close();
+  });
+
+  it("deletes runs older than the cutoff together with everything attached", () => {
+    const store = openStore(":memory:");
+    store.saveReport(at("old", "2026-10-01T10:00:00.000Z"), "alice");
+    store.saveReport(at("new", "2026-10-15T10:00:00.000Z"), "alice");
+    store.addVerifications("old", [
+      {
+        issueId: "old-i0",
+        outcome: "unverified",
+        reason: "page_unreachable",
+        confidence: 0,
+        detail: "x",
+        checkedAt: "2026-10-02T00:00:00.000Z",
+        pages: [],
+      },
+    ]);
+    expect(store.deleteRunsOlderThan("2026-10-10T00:00:00.000Z")).toEqual(["old"]);
+    expect(store.getReport("old")).toBeUndefined();
+    expect(store.listVerifications("old")).toEqual([]);
+    expect(store.getReport("new")?.issues).toHaveLength(1);
+    expect(store.deleteRunsOlderThan("2026-10-10T00:00:00.000Z")).toEqual([]);
+    store.close();
+  });
+});

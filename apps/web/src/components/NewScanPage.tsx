@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { scanClient } from "../lib/api";
-import type { ScanClient, ScanJob } from "../lib/api";
+import type { AppConfig, ScanClient, ScanJob } from "../lib/api";
 import { runHash } from "../lib/route";
 import { BIG_SCAN_PAGES, SCAN_PRESETS, formatElapsed, linesFor } from "../lib/scanFun";
 import { t } from "../lib/strings";
@@ -34,6 +34,8 @@ function rememberAddress(value: string): void {
 
 interface Props {
   client?: ScanClient;
+  /** What the server allows; absent or `local` means no restrictions. */
+  config?: AppConfig;
   /** How often the running scan is polled (ms). */
   pollMs?: number;
   /** How often the fun line changes (ms). */
@@ -154,10 +156,22 @@ function LiveScan({
   );
 }
 
-export function NewScanPage({ client = scanClient, pollMs = 1000, funMs = 4000 }: Props) {
-  const [address, setAddress] = useState(readLastAddress);
-  const [maxPages, setMaxPages] = useState(50);
-  const [maxDepth, setMaxDepth] = useState(3);
+export function NewScanPage({ client = scanClient, config, pollMs = 1000, funMs = 4000 }: Props) {
+  const isPublic = config?.mode === "public";
+  const pageLimit = isPublic ? (config?.limits?.maxPages ?? 20) : 5000;
+  const depthLimit = isPublic ? (config?.limits?.maxDepth ?? 2) : 6;
+  const presets = useMemo(() => {
+    if (!isPublic) return [...SCAN_PRESETS];
+    const quick = Math.min(10, pageLimit);
+    const all = [
+      { id: "quick", label: "Quick", pages: quick, hint: `${quick} pages, about a minute` },
+      { id: "max", label: "Most", pages: pageLimit, hint: `${pageLimit} pages, the demo limit` },
+    ];
+    return all.filter((p, i) => i === 0 || p.pages !== all[0]!.pages);
+  }, [isPublic, pageLimit]);
+  const [address, setAddress] = useState(() => (isPublic ? "" : readLastAddress()));
+  const [maxPages, setMaxPages] = useState(isPublic ? Math.min(10, pageLimit) : 50);
+  const [maxDepth, setMaxDepth] = useState(Math.min(3, depthLimit));
   const [desktop, setDesktop] = useState(true);
   const [mobile, setMobile] = useState(true);
   const [respectRobots, setRespectRobots] = useState(true);
@@ -216,7 +230,7 @@ export function NewScanPage({ client = scanClient, pollMs = 1000, funMs = 4000 }
     try {
       const url = normalizeAddress(address);
       const started = await client.start({ url, maxPages, maxDepth, viewports, respectRobots });
-      rememberAddress(address.trim());
+      if (!isPublic) rememberAddress(address.trim());
       if (alive.current) setJob(started);
     } catch (e) {
       if (alive.current) setError((e as Error).message);
@@ -240,6 +254,12 @@ export function NewScanPage({ client = scanClient, pollMs = 1000, funMs = 4000 }
     <div className={`page-pad new-scan${active ? " is-running" : ""}`}>
       <h1>{t.newScan}</h1>
 
+      {!job && isPublic && config?.disclaimer && (
+        <p className="notice" role="note">
+          {config.disclaimer}
+        </p>
+      )}
+
       {!job && (
         <form onSubmit={submit} className="scan-form">
           <label className="field">
@@ -255,12 +275,26 @@ export function NewScanPage({ client = scanClient, pollMs = 1000, funMs = 4000 }
               onChange={(e) => setAddress(e.target.value)}
             />
             <span className="muted small">{t.scanUrlHint}</span>
+            {isPublic && (config?.examples.length ?? 0) > 0 && (
+              <span className="chip-row" role="group" aria-label="Examples">
+                {config?.examples.map((example) => (
+                  <button
+                    key={example}
+                    type="button"
+                    className="chip"
+                    onClick={() => setAddress(example)}
+                  >
+                    {example}
+                  </button>
+                ))}
+              </span>
+            )}
           </label>
 
           <div className="field">
             <span>How much to scan</span>
             <div className="chip-row" role="group" aria-label="How much to scan">
-              {SCAN_PRESETS.map((p) => (
+              {presets.map((p) => (
                 <button
                   key={p.id}
                   type="button"
@@ -273,7 +307,7 @@ export function NewScanPage({ client = scanClient, pollMs = 1000, funMs = 4000 }
                 </button>
               ))}
             </div>
-            {maxPages > BIG_SCAN_PAGES && (
+            {!isPublic && maxPages > BIG_SCAN_PAGES && (
               <p className="notice" role="note">
                 Large scans can take an hour or more and use a lot of memory. Consider turning off
                 Mobile under Options to halve the time.
@@ -290,7 +324,7 @@ export function NewScanPage({ client = scanClient, pollMs = 1000, funMs = 4000 }
                   className="input"
                   type="number"
                   min={1}
-                  max={5000}
+                  max={pageLimit}
                   value={maxPages}
                   onChange={(e) => setMaxPages(Number(e.target.value))}
                 />
@@ -301,7 +335,7 @@ export function NewScanPage({ client = scanClient, pollMs = 1000, funMs = 4000 }
                   className="input"
                   type="number"
                   min={0}
-                  max={6}
+                  max={depthLimit}
                   value={maxDepth}
                   onChange={(e) => setMaxDepth(Number(e.target.value))}
                 />
@@ -326,14 +360,18 @@ export function NewScanPage({ client = scanClient, pollMs = 1000, funMs = 4000 }
                 </label>
               </fieldset>
             </div>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={respectRobots}
-                onChange={(e) => setRespectRobots(e.target.checked)}
-              />
-              {t.scanRobots}
-            </label>
+            {isPublic ? (
+              <p className="muted small">robots.txt is always respected on this server.</p>
+            ) : (
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={respectRobots}
+                  onChange={(e) => setRespectRobots(e.target.checked)}
+                />
+                {t.scanRobots}
+              </label>
+            )}
           </details>
 
           {error && (

@@ -1,4 +1,3 @@
-import { chromium } from "playwright";
 import { isSameOrigin, normalizeUrl } from "@webdoctor/core";
 import type {
   LinkCheck,
@@ -7,17 +6,19 @@ import type {
   ScanViewport,
   SkippedUrl,
 } from "@webdoctor/core";
+import type { NetworkGuard } from "@webdoctor/netguard";
 import type { ArtifactStore } from "./artifacts";
 import { collectPage } from "./collect";
 import { confirmInBrowser, needsBrowserConfirmation } from "./confirm";
 import { checkLink, checkLinks, fetchText } from "./linkCheck";
 import { isAllowedByRobots, parseRobots } from "./robots";
+import { launchChromium } from "./launch";
 import { diverseSample, expandSitemap } from "./sitemap";
 
 export const SCANNER_VERSION = "0.0.0";
 
 /** Shared by the crawler and Verify Fix. */
-export const launchBrowser = () => chromium.launch();
+export const launchBrowser = (guard?: NetworkGuard) => launchChromium(guard);
 export type BrowserHandle = Awaited<ReturnType<typeof launchBrowser>>;
 
 export type ScanProgress =
@@ -42,6 +43,8 @@ export interface ScanOptions {
   useSitemap?: boolean;
   signal?: AbortSignal;
   userAgent?: string;
+  /** Public mode: every connection (browser and plain HTTP) goes through this guard. */
+  guard?: NetworkGuard;
   onProgress?: (event: ScanProgress) => void;
 }
 
@@ -75,7 +78,8 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   const respectRobots = options.respectRobots ?? true;
   const pageTimeoutMs = options.pageTimeoutMs ?? 30_000;
   const deadline = Date.now() + (options.timeoutMs ?? 600_000);
-  const checkOpts = { userAgent: options.userAgent };
+  const checkOpts = { userAgent: options.userAgent, fetch: options.guard?.fetch };
+  await options.guard?.checkUrl(start);
 
   const stopReasonOf = (): ScanResult["stopReason"] | undefined => {
     if (options.signal?.aborted) return "canceled";
@@ -126,7 +130,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     options.onProgress?.({ type: "skipped", url, reason });
   };
 
-  const browser = await chromium.launch();
+  const browser = await launchBrowser(options.guard);
   try {
     const processItem = async (item: QueueItem) => {
       const path = (() => {
@@ -240,7 +244,10 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   // Re-check such external links in a real browser before they can be reported as broken.
   const suspicious = external.filter((u) => needsBrowserConfirmation(linkChecks.get(u)));
   if (suspicious.length > 0 && !options.signal?.aborted) {
-    await confirmInBrowser(linkChecks, suspicious.slice(0, 15), { signal: options.signal });
+    await confirmInBrowser(linkChecks, suspicious.slice(0, 15), {
+      signal: options.signal,
+      guard: options.guard,
+    });
   }
 
   const droppedPartial = droppedByLimit && !stopReason;

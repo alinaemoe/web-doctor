@@ -188,6 +188,84 @@ cli
   });
 
 cli
+  .command("serve", "Run the public server: anyone can scan, nothing private can be reached")
+  .option("--dir <dir>", "Directory for the database and run files", {
+    default: ".webdoctor-public",
+  })
+  .option("--host <host>", "Address to listen on", { default: "127.0.0.1" })
+  .option("--port <n>", "Port", { default: 8080 })
+  .option("--secret <secret>", "Signs session tokens (default: $WEBDOCTOR_SECRET or random)")
+  .option("--allow-host <names>", "Host names this server answers to, comma separated")
+  .option("--trust-proxy", "Trust X-Forwarded-For (only behind your own reverse proxy)")
+  .option("--demo", "Also run the Broken Shop demo site and allow scanning it")
+  .option("--allow-origin <list>", "Private origins that may be scanned anyway (your own demo)")
+  .option("--example <list>", "Addresses offered as one-click examples")
+  .option("--max-pages <n>", "Pages per scan", { default: 20 })
+  .option("--retention-hours <n>", "Delete runs after this many hours", { default: 24 })
+  .action(async (flags: Record<string, unknown>) => {
+    const port = Number(flags.port);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) fail("--port must be 0-65535");
+    const maxPages = Number(flags.maxPages);
+    if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 200) {
+      fail("--max-pages must be 1-200");
+    }
+    const retentionHours = Number(flags.retentionHours);
+    if (!Number.isFinite(retentionHours) || retentionHours < 1) {
+      fail("--retention-hours must be at least 1");
+    }
+
+    const envSecret = process.env.WEBDOCTOR_SECRET;
+    const secret =
+      typeof flags.secret === "string" && flags.secret ? flags.secret : envSecret || undefined;
+    if (!secret) {
+      console.error(
+        "note: no secret given, sessions will end when the server restarts (set WEBDOCTOR_SECRET).",
+      );
+    }
+
+    const allowOrigins = list(flags.allowOrigin as string | undefined);
+    const examples = list(flags.example as string | undefined);
+    let demo: { close(): Promise<void> } | undefined;
+    if (flags.demo) {
+      const { startDemoSite } = await import("@webdoctor/demo-site");
+      const site = await startDemoSite({ mode: "broken" });
+      demo = site;
+      allowOrigins.push(new URL(site.url).origin, new URL(site.extUrl).origin);
+      examples.unshift(site.url);
+    }
+
+    const webDir = fileURLToPath(new URL("../../web/dist", import.meta.url));
+    const app = await createApiServer({
+      dataDir: String(flags.dir),
+      webDir,
+      public: {
+        secret,
+        allowOrigins,
+        allowedHosts: list(flags.allowHost as string | undefined),
+        trustProxy: Boolean(flags.trustProxy),
+        examples,
+        limits: { maxPages, retentionHours },
+      },
+    });
+    try {
+      await app.listen({ host: String(flags.host), port });
+    } catch (error) {
+      fail(`cannot listen on ${String(flags.host)}:${port}: ${(error as Error).message}`);
+    }
+    const address = app.server.address();
+    const actual = typeof address === "object" && address ? address.port : port;
+    if (!existsSync(webDir)) {
+      console.error("note: the UI is not built yet. Run: pnpm --filter @webdoctor/web build");
+    }
+    console.log(`Web Doctor public server: http://${String(flags.host)}:${actual}/`);
+    if (demo) console.log(`Demo site is scannable at ${examples[0]}`);
+    console.log("Press Ctrl+C to stop.");
+    const stop = () => void Promise.all([app.close(), demo?.close()]).then(() => process.exit(0));
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+  });
+
+cli
   .command("verify <issueId>", "Re-check one issue of a saved run and say whether it is fixed")
   .option("--dir <dir>", "Directory with scan results", { default: ".webdoctor" })
   .option("--run <runId>", "Run containing the issue (default: the newest run that has it)")

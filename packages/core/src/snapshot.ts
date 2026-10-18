@@ -107,7 +107,7 @@ export interface PageSnapshot {
   screenshotTruncated: boolean;
 }
 
-export type LinkCheckError = "timeout" | "dns" | "network" | "invalid";
+export type LinkCheckError = "timeout" | "dns" | "network" | "invalid" | "blocked";
 
 export interface RedirectHop {
   url: string;

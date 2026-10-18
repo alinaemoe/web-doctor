@@ -20,6 +20,73 @@ export interface RunListItem {
 }
 
 let token: string | null = null;
+/** On a public server the token is an anonymous session the page creates for itself. */
+let publicMode = false;
+const SESSION_KEY = "webdoctor.session";
+
+export interface AppConfig {
+  mode: "local" | "public";
+  limits?: { maxPages: number; maxDepth: number; scansPerDay: number; retentionHours: number };
+  examples: string[];
+  disclaimer?: string;
+}
+
+const AppConfigSchema = z.object({
+  mode: z.enum(["local", "public"]),
+  limits: z
+    .object({
+      maxPages: z.number(),
+      maxDepth: z.number(),
+      scansPerDay: z.number(),
+      retentionHours: z.number(),
+    })
+    .optional(),
+  examples: z.array(z.string()).default([]),
+  disclaimer: z.string().optional(),
+});
+
+function persistentStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+async function createSession(): Promise<string> {
+  const res = await fetch("/api/session", { method: "POST" });
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((j: { error?: string }) => j.error)
+      .catch(() => undefined);
+    throw new ApiError(detail ?? `Could not start a session (${res.status})`, res.status);
+  }
+  const created = z.object({ token: z.string() }).parse(await res.json());
+  token = created.token;
+  persistentStorage()?.setItem(SESSION_KEY, created.token);
+  return created.token;
+}
+
+/**
+ * Finds out which kind of server this is. A local server needs the `?token=` from the link the CLI
+ * printed; a public server gives every browser its own anonymous session.
+ */
+export async function loadApp(): Promise<{ config: AppConfig; authorized: boolean }> {
+  let config: AppConfig = { mode: "local", examples: [] };
+  try {
+    const res = await fetch("/api/config");
+    // a local server answers 401 here (no token yet): that is the local default
+    if (res.ok) config = AppConfigSchema.parse(await res.json());
+  } catch {
+    // keep the local default
+  }
+  publicMode = config.mode === "public";
+  if (!publicMode) return { config, authorized: initToken() !== null };
+  token = persistentStorage()?.getItem(SESSION_KEY) ?? null;
+  if (!token) await createSession();
+  return { config, authorized: true };
+}
 
 function safeStorage(): Storage | null {
   try {
@@ -53,8 +120,20 @@ export class ApiError extends Error {
   }
 }
 
+/** A public session that the server no longer knows (it restarted) is replaced once. */
+async function withSession(send: () => Promise<Response>): Promise<Response> {
+  const res = await send();
+  if (res.status === 401 && publicMode) {
+    await createSession();
+    return send();
+  }
+  return res;
+}
+
 async function get(path: string): Promise<unknown> {
-  const res = await fetch(path, { headers: { "x-webdoctor-token": token ?? "" } });
+  const res = await withSession(() =>
+    fetch(path, { headers: { "x-webdoctor-token": token ?? "" } }),
+  );
   if (!res.ok) {
     throw new ApiError(
       res.status === 401
@@ -81,14 +160,16 @@ export function artifactUrl(runId: string, key: string): string {
 }
 
 async function post(path: string, body?: unknown): Promise<unknown> {
-  const res = await fetch(path, {
-    method: "POST",
-    headers: {
-      "x-webdoctor-token": token ?? "",
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const res = await withSession(() =>
+    fetch(path, {
+      method: "POST",
+      headers: {
+        "x-webdoctor-token": token ?? "",
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+  );
   if (!res.ok) {
     const detail = await res
       .json()
@@ -180,9 +261,11 @@ export const scanClient: ScanClient = {
 
 /** The Markdown task for an AI coding agent (the body is plain text, not JSON). */
 export async function fetchFixPrompt(runId: string): Promise<string> {
-  const res = await fetch(`/api/runs/${encodeURIComponent(runId)}/fix-prompt.md`, {
-    headers: { "x-webdoctor-token": token ?? "" },
-  });
+  const res = await withSession(() =>
+    fetch(`/api/runs/${encodeURIComponent(runId)}/fix-prompt.md`, {
+      headers: { "x-webdoctor-token": token ?? "" },
+    }),
+  );
   if (!res.ok) throw new ApiError(`Could not create the fix prompt (${res.status})`, res.status);
   return res.text();
 }

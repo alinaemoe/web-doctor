@@ -1,0 +1,43 @@
+# Public Web Doctor on one small VPS. See docs/deploy.md.
+services:
+  webdoctor:
+    build: .
+    image: webdoctor:local
+    restart: unless-stopped
+    # Only the reverse proxy on this machine talks to it.
+    ports:
+      - "127.0.0.1:8080:8080"
+    command:
+      - serve
+      - --host=0.0.0.0
+      - --port=8080
+      - --dir=/data
+      - --trust-proxy
+      - --allow-host=${WEBDOCTOR_HOST:?set WEBDOCTOR_HOST in .env}
+      - --demo
+    environment:
+      WEBDOCTOR_SECRET: ${WEBDOCTOR_SECRET:?set WEBDOCTOR_SECRET in .env}
+      # Chromium's own sandbox needs a host that allows user namespaces; the container
+      # restrictions below are the main protection either way.
+      WEBDOCTOR_CHROMIUM_SANDBOX: "0"
+    volumes:
+      - data:/data
+    tmpfs:
+      - /tmp:size=768m,mode=1777
+    read_only: true
+    shm_size: 1gb
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 2g
+    cpus: 2
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:

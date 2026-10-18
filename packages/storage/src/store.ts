@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, lt, sql } from "drizzle-orm";
 import {
   ReportSchema,
   RunSummarySchema,
@@ -53,12 +53,24 @@ export function siteOf(url: string): string {
 }
 
 export interface Store {
-  /** Saves a whole report atomically (replaces a run with the same id). */
-  saveReport(report: Report): void;
+  /**
+   * Saves a whole report atomically (replaces a run with the same id). `owner` is set in public
+   * mode: it keeps a visitor's runs apart from everyone else's.
+   */
+  saveReport(report: Report, owner?: string): void;
   getReport(runId: string): Report | undefined;
-  listRuns(): RunListItem[];
+  /** Without a filter: every run (local mode). With `owner`: only that owner's runs. */
+  listRuns(filter?: { owner?: string }): RunListItem[];
+  /** The owner a run was saved with; null when it has none, undefined when there is no such run. */
+  getRunOwner(runId: string): string | null | undefined;
   /** The newest finished run of the same site that started before `beforeStartedAt`. */
-  findPreviousRun(startUrl: string, beforeStartedAt: string): RunListItem | undefined;
+  findPreviousRun(
+    startUrl: string,
+    beforeStartedAt: string,
+    owner?: string,
+  ): RunListItem | undefined;
+  /** Retention: deletes runs (with issues, pages, groups, verifications) started before `iso`. */
+  deleteRunsOlderThan(iso: string): string[];
   /** Persists changed issues (status and history; the heavy parts are rewritten too). */
   updateIssues(updated: Issue[]): void;
   addVerifications(runId: string, results: Verification[]): void;
@@ -77,7 +89,7 @@ export function openStore(path: string): Store {
   migrate(sqlite);
   const db = drizzle(sqlite);
 
-  const saveReport = (report: Report): void => {
+  const saveReport = (report: Report, owner?: string): void => {
     const parsed = ReportSchema.parse(report);
     db.transaction((tx) => {
       const id = parsed.run.id;
@@ -102,6 +114,7 @@ export function openStore(path: string): Store {
           summary: parsed.run.summary ?? summarizeRun(parsed.issues, id),
           externalCapped: parsed.run.externalLinksCapped ?? null,
           reanalyzedFrom: parsed.run.reanalyzedFrom ?? null,
+          owner: owner ?? null,
         })
         .run();
 
@@ -249,7 +262,7 @@ export function openStore(path: string): Store {
       .run();
   };
 
-  const listRuns = (): RunListItem[] => {
+  const listRuns = (filter: { owner?: string } = {}): RunListItem[] => {
     const counts = new Map<string, { fail: number; unverified: number }>();
     const rows = db
       .select({ runId: issues.runId, verdict: issues.verdict, n: sql<number>`count(*)` })
@@ -274,6 +287,7 @@ export function openStore(path: string): Store {
         summary: runs.summary,
       })
       .from(runs)
+      .where(filter.owner === undefined ? undefined : eq(runs.owner, filter.owner))
       .orderBy(desc(runs.startedAt))
       .all()
       .map((r) => {
@@ -311,9 +325,32 @@ export function openStore(path: string): Store {
     saveReport,
     getReport,
     listRuns,
-    findPreviousRun: (startUrl, beforeStartedAt) => {
+    getRunOwner: (runId) => {
+      const row = db.select({ owner: runs.owner }).from(runs).where(eq(runs.id, runId)).get();
+      return row ? row.owner : undefined;
+    },
+    deleteRunsOlderThan: (iso) => {
+      const ids = db
+        .select({ id: runs.id })
+        .from(runs)
+        .where(lt(runs.startedAt, iso))
+        .all()
+        .map((r) => r.id);
+      for (let i = 0; i < ids.length; i += 200) {
+        const part = ids.slice(i, i + 200);
+        db.transaction((tx) => {
+          tx.delete(verifications).where(inArray(verifications.runId, part)).run();
+          tx.delete(issueGroups).where(inArray(issueGroups.runId, part)).run();
+          tx.delete(issues).where(inArray(issues.runId, part)).run();
+          tx.delete(pages).where(inArray(pages.runId, part)).run();
+          tx.delete(runs).where(inArray(runs.id, part)).run();
+        });
+      }
+      return ids;
+    },
+    findPreviousRun: (startUrl, beforeStartedAt, owner) => {
       const site = siteOf(startUrl);
-      return listRuns().find(
+      return listRuns(owner === undefined ? {} : { owner }).find(
         (r) =>
           r.site === site &&
           !r.reanalyzedFrom &&

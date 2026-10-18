@@ -14,6 +14,7 @@
   "dependencies": {
     "@fastify/static": "^10.1.6",
     "@webdoctor/core": "workspace:*",
+    "@webdoctor/netguard": "workspace:*",
     "@webdoctor/runner": "workspace:*",
     "@webdoctor/storage": "workspace:*",
     "@webdoctor/verify": "workspace:*",

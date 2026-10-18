@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@webdoctor/core": "workspace:*",
+    "@webdoctor/netguard": "workspace:*",
     "@webdoctor/rules": "workspace:*",
     "@webdoctor/scanner": "workspace:*",
     "@webdoctor/storage": "workspace:*"

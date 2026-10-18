@@ -1,0 +1,17 @@
+{
+  "name": "@webdoctor/netguard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SSRF protection: address policy, pinned DNS, guarded fetch and a forward proxy for the scanner browser.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "undici": "^7.30.1"
+  }
+}

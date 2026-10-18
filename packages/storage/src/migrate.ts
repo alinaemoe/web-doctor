@@ -83,6 +83,9 @@ const MIGRATIONS: string[] = [
    ALTER TABLE runs ADD COLUMN external_capped INTEGER;`,
   // 5: runs made by `reanalyze` (not separate scans: they do not take part in history)
   `ALTER TABLE runs ADD COLUMN reanalyzed_from TEXT;`,
+  // 6: public mode: who a run belongs to (null in local mode)
+  `ALTER TABLE runs ADD COLUMN owner TEXT;
+   CREATE INDEX runs_owner_idx ON runs (owner, started_at);`,
 ];
 
 export function migrate(db: Database.Database): void {

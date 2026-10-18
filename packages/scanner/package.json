@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@webdoctor/core": "workspace:*",
+    "@webdoctor/netguard": "workspace:*",
     "axe-core": "^4.14.0",
     "playwright": "^1.64.0",
     "sharp": "^0.35.5"

@@ -282,3 +282,35 @@ describe("FixPromptButtons", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("nope");
   });
 });
+
+describe("NewScanPage on a public server", () => {
+  const config = {
+    mode: "public" as const,
+    limits: { maxPages: 15, maxDepth: 2, scansPerDay: 10, retentionHours: 24 },
+    examples: ["http://127.0.0.1:4000/"],
+    disclaimer: "Only scan sites you own or have permission to test.",
+  };
+
+  it("shows the disclaimer, offers examples and hides the robots switch", async () => {
+    const user = userEvent.setup();
+    render(<NewScanPage client={makeClient([job()])} config={config} />);
+    expect(screen.getByRole("note")).toHaveTextContent("permission to test");
+    expect(screen.queryByLabelText(/robots/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "http://127.0.0.1:4000/" }));
+    expect(screen.getByRole("textbox")).toHaveValue("http://127.0.0.1:4000/");
+  });
+
+  it("caps the choices at the server's limits and sends them", async () => {
+    const user = userEvent.setup();
+    const client = makeClient([job()]);
+    render(<NewScanPage client={client} config={config} />);
+    expect(screen.getByRole("button", { name: /Most · 15/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Everything/ })).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox"), "example.com");
+    await user.click(screen.getByRole("button", { name: /Most · 15/ }));
+    await user.click(screen.getByRole("button", { name: /scan/i }));
+    expect(client.start).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://example.com", maxPages: 15, maxDepth: 2 }),
+    );
+  });
+});

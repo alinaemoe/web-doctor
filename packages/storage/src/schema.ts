@@ -15,6 +15,8 @@ export const runs = sqliteTable("runs", {
   summary: text("summary", { mode: "json" }),
   externalCapped: integer("external_capped", { mode: "boolean" }),
   reanalyzedFrom: text("reanalyzed_from"),
+  /** Public mode: hash of the session that started the run. Null in local mode. */
+  owner: text("owner"),
 });
 
 export const pages = sqliteTable(

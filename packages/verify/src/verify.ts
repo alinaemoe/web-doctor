@@ -18,12 +18,20 @@ import {
   launchBrowser,
   parseSitemapLocs,
 } from "@webdoctor/scanner";
-import type { ArtifactStore, BrowserHandle, CollectResult } from "@webdoctor/scanner";
+import type {
+  ArtifactStore,
+  BrowserHandle,
+  CollectResult,
+  LinkCheckOptions,
+} from "@webdoctor/scanner";
+import type { NetworkGuard } from "@webdoctor/netguard";
 
 export interface VerifyOptions {
   pageTimeoutMs?: number;
   userAgent?: string;
   signal?: AbortSignal;
+  /** Public mode: browser and HTTP requests go through this guard. */
+  guard?: NetworkGuard;
   /** Test seam: replaces the real page collection. */
   collect?: (url: string, viewport: ScanViewport, opts: CollectHints) => Promise<CollectResult>;
 }
@@ -238,7 +246,7 @@ export async function verifyIssues(
   if (issues.length === 0) return [];
   const checkedAt = () => new Date().toISOString();
   const out = new Map<string, Verification>();
-  const checkOpts = { userAgent: options.userAgent };
+  const checkOpts = { userAgent: options.userAgent, fetch: options.guard?.fetch };
 
   // ---- site-level issues (sitemap): re-fetch instead of loading a page ----
   for (const issue of issues.filter(isSiteLevel)) {
@@ -252,7 +260,7 @@ export async function verifyIssues(
   const collect =
     options.collect ??
     (async (url: string, viewport: ScanViewport, hints: CollectHints) => {
-      browser ??= await launchBrowser();
+      browser ??= await launchBrowser(options.guard);
       return collectPage(browser, url, {
         viewport,
         depth: 0,
@@ -346,7 +354,7 @@ export async function verifyIssues(
 
 async function verifySitemapIssue(
   issue: Issue,
-  checkOpts: { userAgent?: string },
+  checkOpts: LinkCheckOptions,
   checkedAt: string,
 ): Promise<Verification> {
   const sitemapUrl = issue.pageUrl;

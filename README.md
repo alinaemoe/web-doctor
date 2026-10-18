@@ -3,9 +3,10 @@
 A visual debugging workspace for websites: find a problem, see it on the real page, understand it,
 fix it, **re-verify** it, and track it over time. See [TZ.md](TZ.md) for the full specification.
 
-> Status: **M3+ — scan from the UI, sitemap discovery, AI fix prompt.** Paste an address, get a
-> crawled report, re-verify fixes, and export a Markdown task for an AI coding agent. Run history and
-> Regression Radar (M4) are next.
+> Status: **M5 — public server mode with SSRF protection.** Paste an address, get a crawled report,
+> re-verify fixes, track history, export a Markdown task for an AI coding agent — locally, or on a
+> public server where strangers can scan without being able to reach private networks
+> ([docs/security.md](docs/security.md), [docs/deploy.md](docs/deploy.md)).
 
 ## Layout
 
@@ -16,6 +17,7 @@ fix it, **re-verify** it, and track it over time. See [TZ.md](TZ.md) for the ful
 | `packages/rules`     | Rules, explanation catalog, merging across viewports, root-cause groups      |
 | `packages/storage`   | Drizzle schema + SQLite store (`better-sqlite3`), hand-written migrations    |
 | `packages/demo-site` | **Broken Shop**: demo site with intentional defects + `expected-issues.json` |
+| `packages/netguard`  | SSRF guard: IP policy, pinned DNS, guarded fetch, browser proxy              |
 | `apps/cli`           | `webdoctor scan`, JSON / CSV / HTML reports                                  |
 
 ## Develop
@@ -117,6 +119,23 @@ target that cannot be re-checked, is never reported as fixed. When the original 
 result is marked less certain. Statuses and results are saved in the run's database.
 
 Not in M1/M2 yet: sitemap-based discovery, interactive DOM snapshots, page states, Lighthouse.
+
+## Public server
+
+`webdoctor serve` runs the same inspector for strangers: anonymous sessions, every visitor sees only
+their own runs, and the scanner **cannot be pointed at private addresses** (loopback, LAN, cloud
+metadata, the Docker network). Limits (20 pages, 5 minutes, one scan at a time per visitor, 24 h
+retention) and the full threat model are in [docs/security.md](docs/security.md).
+
+```bash
+pnpm --filter @webdoctor/web build
+WEBDOCTOR_SECRET=dev pnpm webdoctor serve --demo --port 8080     # http://127.0.0.1:8080/
+```
+
+`--demo` also starts Broken Shop and allow-lists exactly its two origins so visitors have something
+to scan. For a VPS: `docker compose up -d --build` behind a TLS proxy, plus an egress firewall as
+a second line of defence ([docs/deploy.md](docs/deploy.md)). Postgres / Redis / S3 scale-out is not
+built; one container with SQLite is the supported setup.
 
 ## Broken Shop
 

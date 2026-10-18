@@ -1,5 +1,6 @@
-import { chromium } from "playwright";
+import { launchChromium } from "./launch";
 import type { LinkCheck } from "@webdoctor/core";
+import type { NetworkGuard } from "@webdoctor/netguard";
 
 /** Statuses where a plain HTTP client may have been treated differently from a real browser. */
 export function needsBrowserConfirmation(check: LinkCheck | undefined): boolean {
@@ -18,10 +19,11 @@ export function needsBrowserConfirmation(check: LinkCheck | undefined): boolean 
 export async function confirmInBrowser(
   checks: Map<string, LinkCheck>,
   urls: string[],
-  options: { timeoutMs?: number; signal?: AbortSignal } = {},
+  options: { timeoutMs?: number; signal?: AbortSignal; guard?: NetworkGuard } = {},
 ): Promise<number> {
   if (urls.length === 0) return 0;
-  const browser = await chromium.launch();
+  const { guard } = options;
+  const browser = await launchChromium(guard);
   let changed = 0;
   try {
     const context = await browser.newContext();

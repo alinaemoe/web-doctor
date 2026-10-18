@@ -1,3 +1,4 @@
+import type { NetworkGuard } from "@webdoctor/netguard";
 import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, writeFileSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -26,6 +27,10 @@ export interface RunScanOptions {
   /** Cap on distinct external addresses whose links get checked (default 100). */
   maxExternalLinks?: number;
   signal?: AbortSignal;
+  /** Public mode: the scan may only reach public addresses, through this guard. */
+  guard?: NetworkGuard;
+  /** Public mode: who the run belongs to (history is built from the same owner's runs only). */
+  owner?: string;
   onProgress?: (e: ScanProgress) => void;
 }
 
@@ -69,6 +74,7 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
     timeoutMs: options.timeoutMs,
     maxExternalLinks: options.maxExternalLinks ?? 100,
     signal: options.signal,
+    guard: options.guard,
     onProgress: options.onProgress,
   });
 
@@ -109,7 +115,7 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
     groups,
   });
 
-  const withHistory = withPreviousRun(report, outDir);
+  const withHistory = withPreviousRun(report, outDir, undefined, options.owner);
 
   return persistRun({
     report: withHistory,
@@ -118,6 +124,7 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
     runDir,
     artifacts,
     formats: options.formats,
+    owner: options.owner,
   });
 }
 
@@ -126,7 +133,12 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
  * keep their history, problems that disappeared from a page that was scanned again become fixed,
  * and problems on pages that were not looked at again are carried over as "not rechecked".
  */
-export function withPreviousRun(report: Report, outDir: string, beforeStartedAt?: string): Report {
+export function withPreviousRun(
+  report: Report,
+  outDir: string,
+  beforeStartedAt?: string,
+  owner?: string,
+): Report {
   const store = openStore(join(outDir, "webdoctor.db"));
   let previous: Report | undefined;
   let previousId: string | undefined;
@@ -134,6 +146,7 @@ export function withPreviousRun(report: Report, outDir: string, beforeStartedAt?
     previousId = store.findPreviousRun(
       report.run.settings.startUrl,
       beforeStartedAt ?? report.run.startedAt,
+      owner,
     )?.id;
     previous = previousId ? store.getReport(previousId) : undefined;
   } finally {
@@ -158,6 +171,7 @@ export interface PersistOptions {
   runDir: string;
   artifacts: FsArtifactStore;
   formats?: ReportFormat[];
+  owner?: string;
 }
 
 /** Writes the snapshots and reports of a finished run and saves it in the database. */
@@ -209,7 +223,7 @@ export async function persistRun(o: PersistOptions): Promise<RunScanResult> {
 
   const store = openStore(join(outDir, "webdoctor.db"));
   try {
-    store.saveReport(report);
+    store.saveReport(report, o.owner);
   } finally {
     store.close();
   }
