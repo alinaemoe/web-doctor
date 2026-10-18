@@ -10,6 +10,7 @@ export const runs = sqliteTable("runs", {
   finishedAt: text("finished_at"),
   partial: integer("partial", { mode: "boolean" }).notNull(),
   stopReason: text("stop_reason"),
+  sitemapUrls: integer("sitemap_urls"),
 });
 
 export const pages = sqliteTable(

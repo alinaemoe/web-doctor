@@ -65,6 +65,7 @@ export function openStore(path: string): Store {
           finishedAt: parsed.run.finishedAt ?? null,
           partial: parsed.run.partial,
           stopReason: parsed.run.stopReason ?? null,
+          sitemapUrls: parsed.run.sitemapUrls ?? null,
         })
         .run();
 
@@ -130,6 +131,7 @@ export function openStore(path: string): Store {
       finishedAt: run.finishedAt ?? undefined,
       partial: run.partial,
       stopReason: (run.stopReason ?? undefined) as Run["stopReason"],
+      sitemapUrls: run.sitemapUrls ?? undefined,
     };
     const pageRows: PageSummary[] = db
       .select()

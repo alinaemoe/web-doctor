@@ -125,7 +125,18 @@ function judge(issue: Issue, snapshot: PageSnapshot, site: SiteContext): Judgeme
         exact.draft.unverifiedReason ?? "blocked",
       );
     }
-    return { outcome: "still-failing", detail: "The problem is still there.", confidence: 1 };
+    const before = affectedElements(issue.evidence);
+    const after = affectedElements(exact.draft.evidence);
+    return {
+      outcome: "still-failing",
+      detail:
+        before !== undefined && after !== undefined && after < before
+          ? `Partly fixed: ${after} of the ${before} elements still have the problem.`
+          : after !== undefined && after > 1
+            ? `The problem is still there (${after} elements).`
+            : "The problem is still there.",
+      confidence: 1,
+    };
   }
 
   // The element may have moved (new path/index) while the problem stayed: match by signature.
@@ -163,6 +174,12 @@ function judge(issue: Issue, snapshot: PageSnapshot, site: SiteContext): Judgeme
         detail: "The check passes on the current page.",
         confidence: 1,
       };
+}
+
+/** Element count carried by aggregated (axe) issues. */
+function affectedElements(evidence: Issue["evidence"]): number | undefined {
+  const m = evidence.find((e) => e.type === "metric" && e.name === "affectedElements");
+  return m && m.type === "metric" ? m.value : undefined;
 }
 
 function linkTargetOf(issue: Issue, snapshot: PageSnapshot): string | null {

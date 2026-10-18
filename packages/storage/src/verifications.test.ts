@@ -112,13 +112,13 @@ describe("verification persistence", () => {
     store.close();
   });
 
-  it("migrates an existing v1 database by adding only the verifications table", () => {
+  it("migrates an existing v1 database by adding the later tables and columns", () => {
     const dir = mkdtempSync(join(tmpdir(), "wd-mig-"));
     try {
       const db = new Database(join(dir, "old.db"));
       db.exec("CREATE TABLE runs (id TEXT PRIMARY KEY); PRAGMA user_version = 1;");
       migrate(db);
-      expect(db.pragma("user_version", { simple: true })).toBe(2);
+      expect(db.pragma("user_version", { simple: true })).toBe(3);
       expect(db.prepare("select count(*) as n from verifications").get()).toEqual({ n: 0 });
       db.close();
     } finally {

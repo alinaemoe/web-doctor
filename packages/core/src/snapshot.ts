@@ -23,6 +23,8 @@ export interface ImageInfo extends ElementInfo {
   hasHeightAttr: boolean;
   naturalWidth: number;
   complete: boolean;
+  /** Inside an embedded third-party widget (a map, ...): not something the site owner controls. */
+  inWidget?: boolean;
 }
 
 export interface LinkInfo extends ElementInfo {

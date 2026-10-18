@@ -26,6 +26,11 @@ export interface IssueDraft {
   evidence: Evidence[];
   explanation: Explanation;
   fix?: FixSuggestion;
+  /**
+   * Set when one issue stands for many elements on a page (axe). The fingerprint then depends on
+   * rule + page + this key only, so fixing some of the elements does not change the identity.
+   */
+  aggregateKey?: string;
 }
 
 export interface SiteContext {
@@ -48,6 +53,7 @@ interface DraftInput {
   howToFix?: string;
   before?: string;
   after?: string;
+  aggregateKey?: string;
   /** For open-ended rule families (axe) that have no static catalog entry. */
   info?: Pick<RuleInfo, "category" | "why" | "verifyCriterion"> & { docsUrl?: string };
 }
@@ -79,6 +85,7 @@ export function makeDraft(input: DraftInput): IssueDraft {
       why: info.why,
       howToFix: input.howToFix ?? info.howToFix,
     },
+    aggregateKey: input.aggregateKey,
     fix: {
       before: input.before,
       after: input.after,

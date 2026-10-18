@@ -8,7 +8,13 @@ import { createApiServer } from "@webdoctor/api";
 import { openStore } from "@webdoctor/storage";
 import { verifyAndSave } from "@webdoctor/verify";
 import type { Category, ScanViewport, Severity } from "@webdoctor/core";
-import { ALL_CATEGORIES, SEVERITY_RANK, runScan, toFixPrompt } from "@webdoctor/runner";
+import {
+  ALL_CATEGORIES,
+  SEVERITY_RANK,
+  reanalyzeRun,
+  runScan,
+  toFixPrompt,
+} from "@webdoctor/runner";
 import type { ReportFormat } from "@webdoctor/runner";
 
 const EXIT = { ok: 0, issues: 1, usage: 2, partial: 3 } as const;
@@ -119,6 +125,11 @@ cli
     console.log(
       `Issues: ${failing.length} (${counts}); ${unverified} couldn't be verified; ${report.groups.length} root-cause groups`,
     );
+    if (report.run.sitemapUrls && report.run.sitemapUrls > report.pages.length / viewports.length) {
+      console.log(
+        `Coverage: the sitemap lists ${report.run.sitemapUrls} pages; a sample was scanned (raise --max-pages to see more).`,
+      );
+    }
     console.log(`Reports: ${runDir}`);
     if (formats.includes("md"))
       console.log(`Fix prompt for an AI agent: ${join(runDir, "fix-prompt.md")}`);
@@ -211,7 +222,7 @@ cli
   )
   .option("--dir <dir>", "Directory with scan results", { default: ".webdoctor" })
   .option("--out <file>", "Write to this file instead of stdout")
-  .option("--max-issues <n>", "Cap on individual problems listed", { default: 60 })
+  .option("--max-findings <n>", "Cap on findings listed in detail", { default: 40 })
   .option("--include-fixed", "Also mention problems already verified as fixed")
   .action((runId: string | undefined, flags: Record<string, unknown>) => {
     const store = openStore(join(resolve(String(flags.dir)), "webdoctor.db"));
@@ -221,7 +232,7 @@ cli
       const report = store.getReport(id);
       if (!report) fail(`run ${id} not found`);
       const md = toFixPrompt(report, {
-        maxIssues: Number(flags.maxIssues),
+        maxFindings: Number(flags.maxFindings),
         includeFixed: Boolean(flags.includeFixed),
       });
       if (typeof flags.out === "string") {
@@ -232,6 +243,30 @@ cli
       }
     } finally {
       store.close();
+    }
+  });
+
+cli
+  .command(
+    "reanalyze [runId]",
+    "Run the current rules again over the saved snapshots of a run (no pages are loaded)",
+  )
+  .option("--dir <dir>", "Directory with scan results", { default: ".webdoctor" })
+  .action(async (runId: string | undefined, flags: Record<string, unknown>) => {
+    const dir = resolve(String(flags.dir));
+    const store = openStore(join(dir, "webdoctor.db"));
+    const id = runId ?? store.listRuns()[0]?.id;
+    store.close();
+    if (!id) fail("no runs found; run `webdoctor scan <url>` first");
+    try {
+      const { report, runDir } = await reanalyzeRun({ outDir: dir, runId: id });
+      const failing = report.issues.filter((i) => i.verdict === "fail").length;
+      console.log(
+        `Re-analyzed ${id}: ${failing} problems, ${report.groups.length} root-cause groups -> new run ${report.run.id}`,
+      );
+      console.log(`Reports: ${runDir}`);
+    } catch (error) {
+      fail((error as Error).message);
     }
   });
 

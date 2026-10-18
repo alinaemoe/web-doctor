@@ -7,7 +7,7 @@ import type { Report } from "@webdoctor/core";
 import { expectedManifest, matchExpected, startDemoSite } from "@webdoctor/demo-site";
 import type { DemoSite } from "@webdoctor/demo-site";
 import { openStore } from "@webdoctor/storage";
-import { runScan } from "@webdoctor/runner";
+import { reanalyzeRun, runScan } from "@webdoctor/runner";
 import type { RunScanResult } from "@webdoctor/runner";
 
 /** Full pipeline against Broken Shop: crawl, rules, storage, reports (needs Chromium). */
@@ -120,5 +120,37 @@ describe("Broken Shop, fixed mode", () => {
   it("every issue left in fixed mode was already present (same fingerprint) when broken", () => {
     const brokenPrints = new Set(broken.report.issues.map((i) => i.fingerprint));
     for (const i of fixed.report.issues) expect(brokenPrints.has(i.fingerprint)).toBe(true);
+  });
+});
+
+describe("re-analyzing a saved run", () => {
+  it("reproduces the same findings from the stored snapshots, as a new run, without loading pages", async () => {
+    const again = await reanalyzeRun({ outDir, runId: broken.report.run.id });
+
+    expect(again.report.run.id).not.toBe(broken.report.run.id);
+    const prints = (r: Report) => r.issues.map((i) => i.fingerprint).sort();
+    expect(prints(again.report)).toEqual(prints(broken.report));
+    expect(again.report.groups).toHaveLength(broken.report.groups.length);
+    for (const f of ["report.json", "issues.csv", "report.html", "fix-prompt.md", "pages.ndjson"]) {
+      expect(existsSync(join(again.runDir, f)), f).toBe(true);
+    }
+    // the screenshots came along, so the new run can be opened with images
+    const shot = again.report.pages.find((p) => p.screenshotKey)!;
+    expect(existsSync(join(again.runDir, shot.screenshotKey!))).toBe(true);
+    // the original run is untouched
+    const store = openStore(join(outDir, "webdoctor.db"));
+    try {
+      expect(store.listRuns().map((r) => r.id)).toEqual(
+        expect.arrayContaining([broken.report.run.id, again.report.run.id]),
+      );
+    } finally {
+      store.close();
+    }
+  }, 120_000);
+
+  it("explains when a run has no snapshots to analyze", async () => {
+    await expect(reanalyzeRun({ outDir, runId: "run-does-not-exist" })).rejects.toThrow(
+      /no saved page snapshots/,
+    );
   });
 });

@@ -60,7 +60,7 @@ the `verify` command. Text copied from the scanned site is fenced and labelled a
 page cannot talk to your agent.
 
 ```bash
-pnpm webdoctor export > task.md      # newest run (also: --out task.md --max-issues 40)
+pnpm webdoctor export > task.md      # newest run (also: --out task.md --max-findings 20)
 ```
 
 In the inspector use **Copy fix prompt** / **Download .md** at the top.

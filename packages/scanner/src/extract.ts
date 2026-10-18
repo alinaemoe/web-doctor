@@ -122,13 +122,18 @@ export function extractInPage(): PageExtract {
 
   const clientWidth = document.documentElement.clientWidth;
   const scrollWidth = document.documentElement.scrollWidth;
-  const offenders: ElementInfo[] =
-    scrollWidth > clientWidth
-      ? Array.from(document.body.querySelectorAll("*"))
-          .filter((el) => el.getBoundingClientRect().right > clientWidth + 1)
-          .slice(0, 5)
-          .map(infoOf)
-      : [];
+  // The elements that stick out the furthest, innermost first: a wide table is the cause, the
+  // <header>/<main> that merely contain it are not.
+  const offenders: ElementInfo[] = (() => {
+    if (scrollWidth <= clientWidth) return [];
+    const wide = Array.from(document.body.querySelectorAll("*"))
+      .map((el) => ({ el, right: el.getBoundingClientRect().right }))
+      .filter((c) => c.right > clientWidth + 1)
+      .sort((a, b) => b.right - a.right)
+      .slice(0, 40);
+    const innermost = wide.filter((c) => !wide.some((o) => o.el !== c.el && c.el.contains(o.el)));
+    return innermost.slice(0, 5).map((c) => infoOf(c.el));
+  })();
 
   const main = document.querySelector("main") ?? document.body;
 

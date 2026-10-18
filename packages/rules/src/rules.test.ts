@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ElementInfo, LinkCheck, PageSnapshot, ScanResult } from "@webdoctor/core";
 import { analyze } from "./analyze";
+import { isInactiveControl, summarizeFailure } from "./pageRules";
 
 const el = (selector: string, extra: Partial<ElementInfo> = {}): ElementInfo => ({
   selector,
@@ -261,6 +262,227 @@ describe("analyze", () => {
     const { issues } = analyze(scanOf([page("http://site.test/", { title: null, h1s: [] })]), {
       runId: "r",
       categories: ["runtime"],
+    });
+    expect(issues).toEqual([]);
+  });
+});
+
+describe("axe findings are aggregated per rule and page", () => {
+  const node = (target: string, html = `<div class="x"></div>`) => ({ target, html });
+  const violation = (
+    id: string,
+    nodes: ReturnType<typeof node>[],
+    impact: "serious" | "minor" = "serious",
+  ) => ({
+    id,
+    impact,
+    help: `Help for ${id}`,
+    description: `Description of ${id}`,
+    helpUrl: `https://dequeuniversity.com/rules/axe/4/${id}`,
+    tags: ["wcag2a"],
+    nodes,
+  });
+
+  it("turns 300 failing elements of one rule into a single issue with the count", () => {
+    const nodes = Array.from({ length: 300 }, (_, i) => node(`.item:nth-child(${i + 1})`));
+    const { issues } = analyze(
+      scanOf([page("http://site.test/", { axe: [violation("role-img-alt", nodes)] })]),
+      { runId: "r" },
+    );
+    expect(issues).toHaveLength(1);
+    const issue = issues[0]!;
+    expect(issue).toMatchObject({ ruleId: "a11y.axe.role-img-alt", severity: "high" });
+    expect(issue.explanation.what).toContain("300 elements on this page");
+    expect(issue.evidence.find((e) => e.type === "metric")).toMatchObject({ value: 300 });
+    // only a handful of examples are kept as evidence
+    expect(issue.evidence.filter((e) => e.type === "dom")).toHaveLength(5);
+  });
+
+  it("keeps one issue per rule: two rules on a page are two issues", () => {
+    const { issues } = analyze(
+      scanOf([
+        page("http://site.test/", {
+          axe: [violation("list", [node(".a")]), violation("label", [node(".b"), node(".c")])],
+        }),
+      ]),
+      { runId: "r" },
+    );
+    expect(issues.map((i) => i.ruleId).sort()).toEqual(["a11y.axe.label", "a11y.axe.list"]);
+  });
+
+  it("keeps the identity when only some of the elements get fixed", () => {
+    const before = analyze(
+      scanOf([page("http://site.test/", { axe: [violation("list", [node(".a"), node(".b")])] })]),
+      { runId: "r1" },
+    ).issues[0]!;
+    const after = analyze(
+      scanOf([page("http://site.test/", { axe: [violation("list", [node(".b")])] })]),
+      { runId: "r2" },
+    ).issues[0]!;
+    expect(after.fingerprint).toBe(before.fingerprint);
+  });
+
+  it("groups one axe rule across pages into a single root-cause hypothesis", () => {
+    const pages = ["a", "b", "c"].map((p) =>
+      page(`http://site.test/${p}`, { axe: [violation("html-has-lang", [node("html")])] }),
+    );
+    const { issues, groups } = analyze(scanOf(pages), { runId: "r" });
+    expect(issues).toHaveLength(3);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ ruleId: "a11y.axe.html-has-lang", affectedPages: 3 });
+  });
+
+  it("ignores a violation without nodes", () => {
+    expect(
+      analyze(scanOf([page("http://site.test/", { axe: [violation("list", [])] })]), { runId: "r" })
+        .issues,
+    ).toEqual([]);
+  });
+});
+
+describe("noise that is not the site owner's to fix", () => {
+  const img = (src: string, extra: Record<string, unknown> = {}) => ({
+    ...el("img"),
+    boundingBox: { x: 0, y: 0, width: 10, height: 10 },
+    src,
+    hasAltAttr: true,
+    hasWidthAttr: false,
+    hasHeightAttr: false,
+    naturalWidth: 10,
+    complete: true,
+    ...extra,
+  });
+
+  it("still reports an ordinary image without width/height", () => {
+    const { issues } = analyze(
+      scanOf([page("http://site.test/", { images: [img("http://site.test/a.png")] })]),
+      { runId: "r" },
+    );
+    expect(issues.map((i) => i.ruleId)).toEqual(["runtime.img.no-dimensions"]);
+  });
+
+  it("skips images inside third-party widgets and inline data: images", () => {
+    const { issues } = analyze(
+      scanOf([
+        page("http://site.test/", {
+          images: [
+            img("https://maps.googleapis.com/maps/vt?x=1", { inWidget: true }),
+            img("data:image/svg+xml,%3Csvg%3E%3C/svg%3E"),
+            img(""),
+          ],
+        }),
+      ]),
+      { runId: "r" },
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it("ignores a couple of pixels of horizontal overflow on mobile but reports a real one", () => {
+    const tiny = { scrollWidth: 392, clientWidth: 390, offenders: [] };
+    const wide = { scrollWidth: 450, clientWidth: 390, offenders: [] };
+    const off = analyze(
+      scanOf([page("http://site.test/", { viewport: "mobile", overflowX: tiny })]),
+      { runId: "r" },
+    );
+    expect(off.issues).toEqual([]);
+    const on = analyze(
+      scanOf([page("http://site.test/", { viewport: "mobile", overflowX: wide })]),
+      { runId: "r" },
+    );
+    expect(on.issues[0]).toMatchObject({ ruleId: "runtime.overflow-x.mobile", severity: "medium" });
+    const small = { scrollWidth: 400, clientWidth: 390, offenders: [] };
+    const low = analyze(
+      scanOf([page("http://site.test/", { viewport: "mobile", overflowX: small })]),
+      { runId: "r" },
+    );
+    expect(low.issues[0]).toMatchObject({ severity: "low" });
+  });
+});
+
+describe("summarizeFailure", () => {
+  it("turns axe's bullet list into one readable sentence", () => {
+    expect(
+      summarizeFailure(
+        "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  Element has an empty title attribute",
+      ),
+    ).toBe(
+      "Fix any of the following: aria-label attribute does not exist or is empty; Element has an empty title attribute.",
+    );
+    expect(summarizeFailure("Fix this one thing")).toBe("Fix this one thing");
+    expect(summarizeFailure("")).toBeUndefined();
+    expect(summarizeFailure(undefined)).toBeUndefined();
+  });
+});
+
+describe("more noise that is not a real problem", () => {
+  const contrast = (...nodes: { target: string; html: string }[]) => ({
+    id: "color-contrast",
+    impact: "serious" as const,
+    help: "Contrast",
+    description: "d",
+    helpUrl: "https://example.test/contrast",
+    tags: [],
+    nodes,
+  });
+
+  it("recognizes disabled controls by attribute, aria-disabled or class", () => {
+    expect(isInactiveControl('<button disabled class="x">Send</button>')).toBe(true);
+    expect(isInactiveControl('<button class="button-send disabled">SEND</button>')).toBe(true);
+    expect(isInactiveControl('<a aria-disabled="true" href="/x">Go</a>')).toBe(true);
+    expect(isInactiveControl('<button class="btn is-disabled">x</button>')).toBe(true);
+    expect(isInactiveControl('<button class="btn disabled-look-alike">x</button>')).toBe(false);
+    expect(isInactiveControl("<p>disabled people</p>")).toBe(false);
+    expect(isInactiveControl('<button class="go">Pay</button>')).toBe(false);
+  });
+
+  it("does not report low contrast on disabled controls, but still on active ones", () => {
+    const { issues } = analyze(
+      scanOf([
+        page("http://site.test/", {
+          axe: [
+            contrast(
+              { target: ".send", html: '<button class="send disabled">SEND</button>' },
+              { target: ".buy", html: '<a class="buy" href="/buy">BUY</a>' },
+            ),
+          ],
+        }),
+      ]),
+      { runId: "r" },
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.explanation.what).toContain("1 element on this page");
+    // a page whose only low-contrast element is disabled has nothing to report
+    expect(
+      analyze(
+        scanOf([
+          page("http://site.test/", {
+            axe: [contrast({ target: ".send", html: "<button disabled>SEND</button>" })],
+          }),
+        ]),
+        { runId: "r" },
+      ).issues,
+    ).toEqual([]);
+  });
+
+  it("skips map tiles from any provider", () => {
+    const img = (src: string) => ({
+      ...el("img"),
+      boundingBox: { x: 0, y: 0, width: 256, height: 256 },
+      src,
+      hasAltAttr: true,
+      hasWidthAttr: false,
+      hasHeightAttr: false,
+      naturalWidth: 256,
+      complete: true,
+    });
+    const tiles = [
+      "https://api.mapbox.com/styles/v1/u/s/tiles/256/15/1/2",
+      "https://tile.openstreetmap.org/15/1/2.png",
+      "https://a.tile.example.com/15/1/2.png",
+      "https://maps.gstatic.com/mapfiles/x.png",
+    ];
+    const { issues } = analyze(scanOf([page("http://site.test/", { images: tiles.map(img) })]), {
+      runId: "r",
     });
     expect(issues).toEqual([]);
   });

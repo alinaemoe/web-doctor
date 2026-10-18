@@ -12,7 +12,7 @@ import { collectPage } from "./collect";
 import { confirmInBrowser, needsBrowserConfirmation } from "./confirm";
 import { checkLink, checkLinks, fetchText } from "./linkCheck";
 import { isAllowedByRobots, parseRobots } from "./robots";
-import { expandSitemap } from "./sitemap";
+import { diverseSample, expandSitemap } from "./sitemap";
 
 export const SCANNER_VERSION = "0.0.0";
 
@@ -99,14 +99,21 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   const queue: QueueItem[] = [{ url: start, depth: 0 }];
   const claimed = new Set<string>([start]);
   if (useSitemap && maxDepth >= 1) {
+    const candidates: string[] = [];
     for (const loc of sitemapLocs) {
       const url = normalizeUrl(loc);
-      if (!url || claimed.has(url) || !isSameOrigin(url, origin)) continue;
+      if (!url || url === start || !isSameOrigin(url, origin)) continue;
       if (ASSET_EXT.test(new URL(url).pathname)) continue;
-      if (claimed.size >= maxPages) {
-        droppedByLimit = true;
-        break;
-      }
+      candidates.push(url);
+    }
+    const room = maxPages - claimed.size;
+    // Everything fits: take it all. Otherwise keep room for pages found by following links
+    // (what visitors actually see first) and spread the rest across templates and languages.
+    const seeds =
+      candidates.length <= room ? candidates : diverseSample(candidates, Math.floor(room * 0.6));
+    if (candidates.length > room) droppedByLimit = true;
+    for (const url of seeds) {
+      if (claimed.has(url) || claimed.size >= maxPages) continue;
       claimed.add(url);
       queue.push({ url, depth: 1 });
     }

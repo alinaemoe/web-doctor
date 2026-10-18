@@ -8,6 +8,7 @@ import {
 import type { Category, Evidence, Issue, IssueGroup, ScanResult, Viewport } from "@webdoctor/core";
 import type { IssueDraft, SiteContext } from "./draft";
 import { pageRules } from "./pageRules";
+import { stabilizeSelector } from "./selectors";
 import { siteRules } from "./siteRules";
 
 export interface AnalyzeOptions {
@@ -38,11 +39,13 @@ function evidenceKeyOf(evidence: Evidence[]): string {
 
 /** Selector without positional parts, so list items of the same kind share one signature. */
 function looseSelector(selector: string): string {
-  return selector.replace(/:nth-(of-type|child)\(\d+\)/g, "");
+  return stabilizeSelector(selector);
 }
 
 /** What issues must have in common to be proposed as one root cause. */
 export function groupSignature(issue: Pick<Issue, "ruleId" | "evidence">): string {
+  // An axe rule across pages: the same component usually causes it everywhere.
+  if (issue.ruleId.startsWith("a11y.axe.")) return `${issue.ruleId}|axe|`;
   const net = issue.evidence.find((e) => e.type === "network");
   if (net) return `${issue.ruleId}|net|${evidenceKeyForRequest(net.requestUrl)}`;
   const con = issue.evidence.find((e) => e.type === "console");
@@ -58,11 +61,12 @@ export function groupSignature(issue: Pick<Issue, "ruleId" | "evidence">): strin
  * Identity = fingerprint (rule + page + element + evidence), see core/fingerprint.
  */
 export function fingerprintDraft(draft: IssueDraft): string {
+  const aggregated = draft.aggregateKey !== undefined;
   return computeFingerprint({
     ruleId: draft.ruleId,
     pageUrl: draft.pageUrl,
-    elementKey: elementKeyOf(draft.evidence),
-    evidenceKey: evidenceKeyOf(draft.evidence),
+    elementKey: aggregated ? draft.aggregateKey : elementKeyOf(draft.evidence),
+    evidenceKey: aggregated ? "" : evidenceKeyOf(draft.evidence),
   });
 }
 

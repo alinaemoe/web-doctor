@@ -62,7 +62,7 @@ describe("webdoctor CLI (real process)", () => {
     expect(stdout.stdout).toContain("# Fix the problems found on");
 
     const file = join(out, "task.md");
-    const toFile = await cli(["export", "--dir", out, "--out", file, "--max-issues", "3"]);
+    const toFile = await cli(["export", "--dir", out, "--out", file, "--max-findings", "3"]);
     expect(toFile.code).toBe(0);
     expect(readFileSync(file, "utf8")).toContain("## Your task");
   }, 60_000);

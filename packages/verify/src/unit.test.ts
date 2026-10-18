@@ -216,4 +216,53 @@ describe("verifyIssues without a browser (injected collection)", () => {
     expect(v).toMatchObject({ outcome: "verified-fixed", elementGone: true });
     expect(v!.confidence).toBeLessThan(1);
   });
+
+  it("reports a partial fix of an aggregated finding with the remaining count", async () => {
+    const dom = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        type: "dom" as const,
+        selector: `.item-${i}`,
+        htmlSnippet: "<div>",
+        nodeSignature: { domPath: `.item-${i}` },
+      }));
+    const metric = (n: number) => ({
+      type: "metric" as const,
+      name: "affectedElements",
+      value: n,
+      threshold: 0,
+      unit: "elements",
+    });
+    const axe = (n: number) => ({
+      id: "list",
+      impact: "serious" as const,
+      help: "Lists",
+      description: "d",
+      helpUrl: "https://example.test/list",
+      tags: [],
+      nodes: Array.from({ length: n }, (_, i) => ({ target: `.item-${i}`, html: "<ul>" })),
+    });
+    const fingerprint = computeFingerprint({
+      ruleId: "a11y.axe.list",
+      pageUrl: "http://site.test/a",
+      elementKey: "axe",
+      evidenceKey: "",
+    });
+    const old = issue({
+      ruleId: "a11y.axe.list",
+      category: "accessibility",
+      fingerprint,
+      evidence: [metric(10), ...dom(3)],
+    });
+
+    const [partly] = await verifyIssues([old], {
+      collect: async () => ({ ok: true, snapshot: snapshot({ axe: [axe(4)] }) }),
+    });
+    expect(partly).toMatchObject({ outcome: "still-failing" });
+    expect(partly!.detail).toBe("Partly fixed: 4 of the 10 elements still have the problem.");
+
+    const [done] = await verifyIssues([old], {
+      collect: async () => ({ ok: true, snapshot: snapshot({ axe: [] }) }),
+    });
+    expect(done).toMatchObject({ outcome: "verified-fixed" });
+  });
 });

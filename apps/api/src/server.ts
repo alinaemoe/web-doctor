@@ -95,17 +95,17 @@ export async function createApiServer(options: ApiOptions): Promise<FastifyInsta
 
   app.get("/api/runs", async () => store.listRuns());
 
-  app.get<{ Params: { id: string }; Querystring: { includeFixed?: string; maxIssues?: string } }>(
+  app.get<{ Params: { id: string }; Querystring: { includeFixed?: string; maxFindings?: string } }>(
     "/api/runs/:id/fix-prompt.md",
     async (req, reply) => {
       if (!RUN_ID.test(req.params.id)) return reply.code(400).send({ error: "bad run id" });
       const report = store.getReport(req.params.id);
       if (!report) return reply.code(404).send({ error: "run not found" });
-      const maxIssues = Number(req.query.maxIssues);
+      const maxFindings = Number(req.query.maxFindings);
       const md = toFixPrompt(report, {
         includeFixed: req.query.includeFixed === "1",
-        maxIssues:
-          Number.isFinite(maxIssues) && maxIssues > 0 ? Math.min(maxIssues, 500) : undefined,
+        maxFindings:
+          Number.isFinite(maxFindings) && maxFindings > 0 ? Math.min(maxFindings, 500) : undefined,
       });
       return reply
         .header("content-type", "text/markdown; charset=utf-8")

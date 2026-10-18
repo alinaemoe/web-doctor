@@ -75,6 +75,8 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX verifications_run_idx ON verifications (run_id, issue_id);
   `,
+  // 3: sitemap size, for coverage
+  `ALTER TABLE runs ADD COLUMN sitemap_urls INTEGER;`,
 ];
 
 export function migrate(db: Database.Database): void {

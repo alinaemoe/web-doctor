@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, writeFileSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ReportSchema, SCHEMA_VERSION } from "@webdoctor/core";
-import type { Category, Report, ScanViewport, Severity } from "@webdoctor/core";
+import type { Category, Report, ScanResult, ScanViewport, Severity } from "@webdoctor/core";
 import { analyze } from "@webdoctor/rules";
 import { FsArtifactStore, SCANNER_VERSION, scan } from "@webdoctor/scanner";
 import type { ScanProgress } from "@webdoctor/scanner";
@@ -44,7 +44,7 @@ export const SEVERITY_RANK: Record<Severity, number> = {
   critical: 4,
 };
 
-const stamp = () =>
+export const stamp = () =>
   new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-");
 
 export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
@@ -92,6 +92,7 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
       finishedAt: result.finishedAt,
       partial: result.partial,
       stopReason: result.stopReason,
+      sitemapUrls: result.sitemap.locs.length,
     },
     pages: result.pages.map((p) => ({
       url: p.url,
@@ -107,6 +108,28 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
     groups,
   });
 
+  return persistRun({
+    report,
+    result,
+    outDir,
+    runDir,
+    artifacts,
+    formats: options.formats,
+  });
+}
+
+export interface PersistOptions {
+  report: Report;
+  result: ScanResult;
+  outDir: string;
+  runDir: string;
+  artifacts: FsArtifactStore;
+  formats?: ReportFormat[];
+}
+
+/** Writes the snapshots and reports of a finished run and saves it in the database. */
+export async function persistRun(o: PersistOptions): Promise<RunScanResult> {
+  const { report, result, outDir, runDir, artifacts } = o;
   const files: string[] = [];
   const write = (name: string, data: string) => {
     const path = join(runDir, name);
@@ -114,8 +137,9 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
     files.push(path);
   };
 
-  // Raw snapshots stay on disk so single issues can be re-verified later (Verify Fix).
-  // One JSON line per page: a scan of thousands of pages must not become one giant string.
+  // Raw snapshots stay on disk so a run can be re-analyzed with newer rules and single issues can
+  // be re-verified. One JSON line per page: a scan of thousands of pages must not become one
+  // giant string.
   const { pages: snapshots, ...scanMeta } = result;
   write("scan.json", JSON.stringify(scanMeta));
   const pagesFile = join(runDir, "pages.ndjson");
@@ -127,9 +151,7 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
   }
   files.push(pagesFile);
 
-  const formats = options.formats?.length
-    ? options.formats
-    : (["json", "csv", "html", "md"] as const);
+  const formats = o.formats?.length ? o.formats : (["json", "csv", "html", "md"] as const);
   if (formats.includes("json")) write("report.json", JSON.stringify(report, null, 2));
   if (formats.includes("csv")) write("issues.csv", toCsv(report.issues));
   if (formats.includes("md")) write("fix-prompt.md", toFixPrompt(report));
@@ -139,10 +161,16 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
       await Promise.all(
         report.pages
           .filter((p) => p.screenshotKey)
-          .map(async (p) => [p.screenshotKey!, await artifacts.read(p.screenshotKey!)] as const),
+          .map(
+            async (p) =>
+              [
+                p.screenshotKey!,
+                await artifacts.read(p.screenshotKey!).catch(() => undefined),
+              ] as const,
+          ),
       ),
     );
-    for (const [k, v] of shots) cache.set(k, v);
+    for (const [k, v] of shots) if (v) cache.set(k, v);
     write("report.html", toHtml(report, { screenshot: (key) => cache.get(key) }));
   }
 

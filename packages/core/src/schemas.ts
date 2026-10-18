@@ -165,6 +165,8 @@ export const RunSchema = z.object({
   /** True when the run was canceled or hit a limit before finishing. */
   partial: z.boolean(),
   stopReason: z.enum(["canceled", "timeout", "max-pages"]).optional(),
+  /** How many pages the sitemap lists (for "scanned N of M" coverage). */
+  sitemapUrls: z.number().int().nonnegative().optional(),
 });
 
 /** Per-page summary kept with a run (for the page list, screenshots, Verify Fix). */
