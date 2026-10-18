@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 import { randomBytes } from "node:crypto";
-import { existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cac } from "cac";
@@ -14,6 +14,8 @@ import {
   SEVERITY_RANK,
   reanalyzeRun,
   runScan,
+  toAnnotations,
+  toCiSummary,
   toFixPrompt,
 } from "@webdoctor/runner";
 import type { ReportFormat } from "@webdoctor/runner";
@@ -149,9 +151,20 @@ cli
     const counted = flags.newOnly
       ? failing.filter((i) => i.status === "new" || i.status === "reopened")
       : failing;
-    if (failOn && counted.some((i) => SEVERITY_RANK[i.severity] >= SEVERITY_RANK[failOn])) {
-      process.exit(EXIT.issues);
+    const breaking = failOn
+      ? counted.filter((i) => SEVERITY_RANK[i.severity] >= SEVERITY_RANK[failOn])
+      : [];
+    if (process.env.GITHUB_ACTIONS === "true" && flags.ci) {
+      for (const line of toAnnotations(breaking)) console.log(line);
+      const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+      if (summaryFile) {
+        appendFileSync(
+          summaryFile,
+          toCiSummary(report, failing, { failOn, failed: breaking.length > 0 }),
+        );
+      }
     }
+    if (breaking.length > 0) process.exit(EXIT.issues);
     process.exit(report.run.partial ? EXIT.partial : EXIT.ok);
   });
 

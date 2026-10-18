@@ -253,6 +253,13 @@ importers:
       cac:
         specifier: ^7.1.0
         version: 7.1.0
+    devDependencies:
+      axe-core:
+        specifier: ^4.14.0
+        version: 4.14.0
+      playwright:
+        specifier: ^1.64.0
+        version: 1.64.0
 
   apps/web:
     dependencies:

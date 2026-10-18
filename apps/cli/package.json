@@ -22,5 +22,9 @@
     "@webdoctor/storage": "workspace:*",
     "@webdoctor/verify": "workspace:*",
     "cac": "^7.1.0"
+  },
+  "devDependencies": {
+    "axe-core": "^4.14.0",
+    "playwright": "^1.64.0"
   }
 }

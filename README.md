@@ -3,10 +3,19 @@
 A visual debugging workspace for websites: find a problem, see it on the real page, understand it,
 fix it, **re-verify** it, and track it over time. See [TZ.md](TZ.md) for the full specification.
 
-> Status: **M5 — public server mode with SSRF protection.** Paste an address, get a crawled report,
+> Status: **M6 — polished MVP.** Paste an address, get a crawled report,
 > re-verify fixes, track history, export a Markdown task for an AI coding agent — locally, or on a
 > public server where strangers can scan without being able to reach private networks
 > ([docs/security.md](docs/security.md), [docs/deploy.md](docs/deploy.md)).
+
+## Quick start
+
+```bash
+pnpm install
+pnpm --filter @webdoctor/scanner exec playwright install chromium
+pnpm --filter @webdoctor/web build
+pnpm webdoctor ui          # open the printed link, press "New scan", paste your site's address
+```
 
 ## Layout
 
@@ -118,7 +127,21 @@ Only the page and rule behind the issue are re-checked (no crawl, no screenshots
 target that cannot be re-checked, is never reported as fixed. When the original element is gone the
 result is marked less certain. Statuses and results are saved in the run's database.
 
-Not in M1/M2 yet: sitemap-based discovery, interactive DOM snapshots, page states, Lighthouse.
+Not built yet: interactive DOM snapshots, page states, Lighthouse (see the roadmap in TZ.md).
+
+## CI
+
+`webdoctor scan <url> --ci --fail-on high --new-only` fails a build only on **new** problems and, in
+GitHub Actions, writes annotations and a job summary. Example workflow: [docs/ci.md](docs/ci.md).
+
+## Accessibility of the inspector
+
+The inspector audits itself: `apps/cli/test/ui-a11y.e2e.test.ts` runs axe (WCAG 2.0/2.1 A and AA) on
+the runs list, new scan, run workspace and issue details, in light and dark themes and at 375 px, and
+fails on any critical or serious finding. Automated checks cover only part of WCAG; keyboard
+navigation (`j`/`k`, `/`) and focus rings are tested by hand.
+
+Demo video storyboard: [docs/demo-script.md](docs/demo-script.md).
 
 ## Public server
 
