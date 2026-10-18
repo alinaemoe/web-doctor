@@ -52,6 +52,31 @@ pnpm webdoctor scan https://your-site.com --max-pages 100
 
 or press **New scan** in the inspector (`pnpm webdoctor ui`) and paste the address.
 
+## History and Regression Radar
+
+Scans of the same site (same origin) form a history. Every new scan is compared with the one before it
+by issue fingerprint:
+
+| What happened                                        | Status                                     |
+| ---------------------------------------------------- | ------------------------------------------ |
+| found now, not before                                | **New**                                    |
+| found before and now                                 | **Open**                                   |
+| found before, gone, and its page was scanned again   | **Fixed**                                  |
+| fixed earlier and found again                        | **Reopened** ("back")                      |
+| known before, but this scan did not look at its page | **Not rechecked** (never counted as fixed) |
+
+"Looked at again" means the same page in every viewport where the problem was seen, the same
+category, and (for external links) link checks that were not cut short. A smaller sample, a page that
+is down, or a different set of categories can therefore never make problems look fixed.
+
+```bash
+pnpm webdoctor history                         # runs per site with new / fixed / back / not rechecked
+pnpm webdoctor scan <url> --fail-on high --new-only   # CI: fail only on regressions
+```
+
+In the inspector, the run page shows a strip with the changes, a **Changes** tab, a **Not rechecked**
+tab and per-problem history; the runs page draws a trend per site.
+
 ## Fix prompt for an AI agent
 
 Every scan writes `fix-prompt.md`: a Markdown task for an AI coding agent listing root causes first,

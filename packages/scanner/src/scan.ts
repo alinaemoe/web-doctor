@@ -230,7 +230,8 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   }
   for (const loc of sitemapLocs.slice(0, 500)) addTarget(loc);
 
-  const external = [...externalTargets].slice(0, options.maxExternalLinks ?? 200);
+  const externalCap = options.maxExternalLinks ?? 200;
+  const external = [...externalTargets].slice(0, externalCap);
   const allTargets = [...internalTargets, ...external];
   options.onProgress?.({ type: "links", total: allTargets.length });
   await checkLinks(allTargets, linkChecks, { ...checkOpts, signal: options.signal });
@@ -252,6 +253,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     partial: Boolean(stopReason) || droppedPartial,
     stopReason: stopReason ?? (droppedPartial ? "max-pages" : undefined),
     pages,
+    externalLinksCapped: externalTargets.size > externalCap,
     skipped,
     linkChecks: Object.fromEntries(linkChecks),
     robots: { url: robots.url, status: robots.status, text: robots.text, error: robots.error },

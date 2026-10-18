@@ -17,19 +17,37 @@ interface Props {
   onChange: (next: Filters) => void;
   pageUrls: string[];
   shown: number;
-  counts: { fail: number; unverified: number; fixed: number };
+  counts: { fail: number; unverified: number; fixed: number; changes: number; stale: number };
+  /** The run has a previous run to compare with: show the Changes tab. */
+  hasPrevious: boolean;
   searchRef: RefObject<HTMLInputElement | null>;
 }
 
-export function FilterBar({ filters, onChange, pageUrls, shown, counts, searchRef }: Props) {
+export function FilterBar({
+  filters,
+  onChange,
+  pageUrls,
+  shown,
+  counts,
+  hasPrevious,
+  searchRef,
+}: Props) {
   const set = <K extends keyof Filters>(key: K, value: Filters[K]) =>
     onChange({ ...filters, [key]: value });
 
   const tabs: { id: Filters["verdict"]; label: string; count: number }[] = [
     { id: "fail", label: t.failing, count: counts.fail },
+    ...(hasPrevious ? [{ id: "changes" as const, label: t.changes, count: counts.changes }] : []),
     { id: "unverified", label: t.unverified, count: counts.unverified },
     { id: "fixed", label: t.fixed, count: counts.fixed },
-    { id: "all", label: t.all, count: counts.fail + counts.unverified + counts.fixed },
+    ...(counts.stale > 0
+      ? [{ id: "stale" as const, label: t.notRechecked, count: counts.stale }]
+      : []),
+    {
+      id: "all",
+      label: t.all,
+      count: counts.fail + counts.unverified + counts.fixed + counts.stale,
+    },
   ];
 
   return (

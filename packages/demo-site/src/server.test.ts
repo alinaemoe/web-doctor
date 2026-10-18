@@ -77,7 +77,7 @@ describe("Broken Shop — broken mode", () => {
 describe("Broken Shop — fixed mode and controls", () => {
   it("switches to fixed at runtime via the control endpoint", async () => {
     const res = await get("/__demo/mode/fixed", { method: "POST" });
-    expect(await res.json()).toEqual({ mode: "fixed", flakyDown: false });
+    expect(await res.json()).toEqual({ mode: "fixed", flakyDown: false, down: [] });
     expect(site.getMode()).toBe("fixed");
   });
 
@@ -98,6 +98,18 @@ describe("Broken Shop — fixed mode and controls", () => {
     expect((await get("/flaky")).status).toBe(503);
     await get("/__demo/flaky/up", { method: "POST" });
     expect((await get("/flaky")).status).toBe(200);
+  });
+
+  it("takes any single path down with 503 and back up", async () => {
+    await get("/__demo/down/" + encodeURIComponent("/cart"), { method: "POST" });
+    expect((await get("/cart")).status).toBe(503);
+    expect((await get("/about")).status).toBe(200);
+    site.setPathDown("/about", true);
+    expect((await get("/about")).status).toBe(503);
+    await get("/__demo/up/" + encodeURIComponent("/cart"), { method: "POST" });
+    site.setPathDown("/about", false);
+    expect((await get("/cart")).status).toBe(200);
+    expect((await get("/about")).status).toBe(200);
   });
 
   it("rejects unknown controls and non-GET methods", async () => {

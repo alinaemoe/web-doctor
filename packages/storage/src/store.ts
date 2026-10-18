@@ -3,8 +3,22 @@ import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { desc, eq, sql } from "drizzle-orm";
-import { ReportSchema, SCHEMA_VERSION, VerificationSchema } from "@webdoctor/core";
-import type { Issue, IssueGroup, PageSummary, Report, Run, Verification } from "@webdoctor/core";
+import {
+  ReportSchema,
+  RunSummarySchema,
+  SCHEMA_VERSION,
+  VerificationSchema,
+  summarizeRun,
+} from "@webdoctor/core";
+import type {
+  Issue,
+  IssueGroup,
+  PageSummary,
+  Report,
+  Run,
+  RunSummary,
+  Verification,
+} from "@webdoctor/core";
 import { migrate } from "./migrate";
 import { issueGroups, issues, pages, runs, verifications } from "./schema";
 
@@ -20,6 +34,22 @@ export interface RunListItem {
   failCount: number;
   /** Issues that could not be verified. */
   unverifiedCount: number;
+  /** The site this run belongs to (origin of the start URL). */
+  site: string;
+  previousRunId?: string;
+  /** Set for runs made by `reanalyze`; they are views of another run, not new scans. */
+  reanalyzedFrom?: string;
+  /** What is open and what changed since the previous run. */
+  summary: RunSummary;
+}
+
+/** Origin of an address; runs of the same origin form one history. */
+export function siteOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
 }
 
 export interface Store {
@@ -27,6 +57,8 @@ export interface Store {
   saveReport(report: Report): void;
   getReport(runId: string): Report | undefined;
   listRuns(): RunListItem[];
+  /** The newest finished run of the same site that started before `beforeStartedAt`. */
+  findPreviousRun(startUrl: string, beforeStartedAt: string): RunListItem | undefined;
   /** Persists changed issues (status and history; the heavy parts are rewritten too). */
   updateIssues(updated: Issue[]): void;
   addVerifications(runId: string, results: Verification[]): void;
@@ -66,6 +98,10 @@ export function openStore(path: string): Store {
           partial: parsed.run.partial,
           stopReason: parsed.run.stopReason ?? null,
           sitemapUrls: parsed.run.sitemapUrls ?? null,
+          previousRunId: parsed.run.previousRunId ?? null,
+          summary: parsed.run.summary ?? summarizeRun(parsed.issues, id),
+          externalCapped: parsed.run.externalLinksCapped ?? null,
+          reanalyzedFrom: parsed.run.reanalyzedFrom ?? null,
         })
         .run();
 
@@ -132,6 +168,10 @@ export function openStore(path: string): Store {
       partial: run.partial,
       stopReason: (run.stopReason ?? undefined) as Run["stopReason"],
       sitemapUrls: run.sitemapUrls ?? undefined,
+      previousRunId: run.previousRunId ?? undefined,
+      externalLinksCapped: run.externalCapped ?? undefined,
+      reanalyzedFrom: run.reanalyzedFrom ?? undefined,
+      summary: run.summary ? RunSummarySchema.parse(run.summary) : undefined,
     };
     const pageRows: PageSummary[] = db
       .select()
@@ -194,42 +234,92 @@ export function openStore(path: string): Store {
     });
   };
 
+  /** Recomputes the numbers of a run from what is stored (statuses change when a fix is verified). */
+  const refreshSummary = (runId: string): void => {
+    const rows = db.select().from(issues).where(eq(issues.runId, runId)).all();
+    const light = rows.map((r) => ({
+      status: r.status,
+      verdict: r.verdict,
+      lastSeenRunId: r.lastSeenRunId,
+      statusHistory: (r.data as IssueData).statusHistory,
+    })) as unknown as Issue[];
+    db.update(runs)
+      .set({ summary: summarizeRun(light, runId) })
+      .where(eq(runs.id, runId))
+      .run();
+  };
+
+  const listRuns = (): RunListItem[] => {
+    const counts = new Map<string, { fail: number; unverified: number }>();
+    const rows = db
+      .select({ runId: issues.runId, verdict: issues.verdict, n: sql<number>`count(*)` })
+      .from(issues)
+      .groupBy(issues.runId, issues.verdict)
+      .all();
+    for (const r of rows) {
+      const c = counts.get(r.runId) ?? { fail: 0, unverified: 0 };
+      if (r.verdict === "fail") c.fail = r.n;
+      else c.unverified += r.n;
+      counts.set(r.runId, c);
+    }
+    return db
+      .select({
+        id: runs.id,
+        startUrl: runs.startUrl,
+        status: runs.status,
+        startedAt: runs.startedAt,
+        partial: runs.partial,
+        previousRunId: runs.previousRunId,
+        reanalyzedFrom: runs.reanalyzedFrom,
+        summary: runs.summary,
+      })
+      .from(runs)
+      .orderBy(desc(runs.startedAt))
+      .all()
+      .map((r) => {
+        // runs saved before history existed have no summary: fall back to plain counts
+        const parsed = r.summary ? RunSummarySchema.parse(r.summary) : undefined;
+        const c = counts.get(r.id) ?? { fail: 0, unverified: 0 };
+        const summary: RunSummary = parsed ?? {
+          total: c.fail + c.unverified,
+          failing: c.fail,
+          unverified: c.unverified,
+          fixed: 0,
+          new: 0,
+          open: 0,
+          reopened: 0,
+          fixedSinceLast: 0,
+          notRechecked: 0,
+        };
+        return {
+          id: r.id,
+          startUrl: r.startUrl,
+          status: r.status,
+          startedAt: r.startedAt,
+          partial: r.partial,
+          failCount: summary.failing,
+          unverifiedCount: summary.unverified,
+          site: siteOf(r.startUrl),
+          previousRunId: r.previousRunId ?? undefined,
+          reanalyzedFrom: r.reanalyzedFrom ?? undefined,
+          summary,
+        };
+      });
+  };
+
   return {
     saveReport,
     getReport,
-    listRuns: () => {
-      const counts = new Map<string, { fail: number; unverified: number }>();
-      const rows = db
-        .select({
-          runId: issues.runId,
-          verdict: issues.verdict,
-          n: sql<number>`count(*)`,
-        })
-        .from(issues)
-        .groupBy(issues.runId, issues.verdict)
-        .all();
-      for (const r of rows) {
-        const c = counts.get(r.runId) ?? { fail: 0, unverified: 0 };
-        if (r.verdict === "fail") c.fail = r.n;
-        else c.unverified += r.n;
-        counts.set(r.runId, c);
-      }
-      return db
-        .select({
-          id: runs.id,
-          startUrl: runs.startUrl,
-          status: runs.status,
-          startedAt: runs.startedAt,
-          partial: runs.partial,
-        })
-        .from(runs)
-        .orderBy(desc(runs.startedAt))
-        .all()
-        .map((r) => ({
-          ...r,
-          failCount: counts.get(r.id)?.fail ?? 0,
-          unverifiedCount: counts.get(r.id)?.unverified ?? 0,
-        }));
+    listRuns,
+    findPreviousRun: (startUrl, beforeStartedAt) => {
+      const site = siteOf(startUrl);
+      return listRuns().find(
+        (r) =>
+          r.site === site &&
+          !r.reanalyzedFrom &&
+          r.startedAt < beforeStartedAt &&
+          (r.status === "completed" || r.status === "completed_with_warnings"),
+      );
     },
     updateIssues: (updated) => {
       db.transaction((tx) => {
@@ -249,6 +339,7 @@ export function openStore(path: string): Store {
             .run();
         }
       });
+      for (const runId of new Set(updated.map((i) => i.runId))) refreshSummary(runId);
     },
     addVerifications: (runId, results) => {
       if (results.length === 0) return;

@@ -155,6 +155,21 @@ export const RunSettingsSchema = z.object({
   respectRobots: z.boolean(),
 });
 
+/** Numbers shown next to a run and in the history (see history.ts). */
+export const RunSummarySchema = z.object({
+  total: z.number().int().nonnegative(),
+  /** Open problems this run actually saw (verdict fail, not fixed, not carried over). */
+  failing: z.number().int().nonnegative(),
+  unverified: z.number().int().nonnegative(),
+  fixed: z.number().int().nonnegative(),
+  new: z.number().int().nonnegative(),
+  open: z.number().int().nonnegative(),
+  reopened: z.number().int().nonnegative(),
+  fixedSinceLast: z.number().int().nonnegative(),
+  /** Known from an earlier run but not looked at again in this one. */
+  notRechecked: z.number().int().nonnegative(),
+});
+
 export const RunSchema = z.object({
   id: z.string(),
   status: RunStatusSchema,
@@ -167,6 +182,13 @@ export const RunSchema = z.object({
   stopReason: z.enum(["canceled", "timeout", "max-pages"]).optional(),
   /** How many pages the sitemap lists (for "scanned N of M" coverage). */
   sitemapUrls: z.number().int().nonnegative().optional(),
+  /** The run this one was compared with (same site, the run before it). */
+  previousRunId: z.string().optional(),
+  /** True when only the first N external links were checked (so absent links prove nothing). */
+  externalLinksCapped: z.boolean().optional(),
+  summary: RunSummarySchema.optional(),
+  /** Set when this run is the saved snapshots of another run analyzed again with newer rules. */
+  reanalyzedFrom: z.string().optional(),
 });
 
 /** Per-page summary kept with a run (for the page list, screenshots, Verify Fix). */

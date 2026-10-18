@@ -1,5 +1,5 @@
 import { IssueSchema, ReportSchema, VerificationSchema } from "@webdoctor/core/shared";
-import type { Issue, Report, Verification } from "@webdoctor/core/shared";
+import type { Issue, Report, RunSummary, Verification } from "@webdoctor/core/shared";
 import { z } from "zod";
 
 const STORAGE_KEY = "webdoctor.token";
@@ -12,6 +12,11 @@ export interface RunListItem {
   partial: boolean;
   failCount: number;
   unverifiedCount: number;
+  /** Origin of the scanned address: runs of one site form one history. */
+  site: string;
+  previousRunId?: string;
+  reanalyzedFrom?: string;
+  summary: RunSummary;
 }
 
 let token: string | null = null;

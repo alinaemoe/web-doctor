@@ -3,6 +3,7 @@ import type { Issue, Report, Verification } from "@webdoctor/core/shared";
 import { verifyGroup, verifyIssue } from "../lib/api";
 import type { VerifyResponse } from "../lib/api";
 import type { VerifyUi } from "../lib/verifyUi";
+import { HistoryStrip } from "./HistoryStrip";
 import { Inspector } from "./Inspector";
 
 export interface VerifyClient {
@@ -107,6 +108,7 @@ export function RunWorkspace({
           </button>
         </p>
       )}
+      <HistoryStrip run={report.run} />
       <Inspector
         report={report}
         initialIssueId={initialIssueId}

@@ -6,7 +6,7 @@ export interface Filters {
   /** Empty = no restriction. */
   categories: Category[];
   severities: Severity[];
-  verdict: "fail" | "unverified" | "fixed" | "all";
+  verdict: "fail" | "changes" | "unverified" | "fixed" | "stale" | "all";
   viewport: "all" | "desktop" | "mobile";
   /** Exact page URL, "" = all pages. */
   page: string;
@@ -26,14 +26,35 @@ export const defaultFilters: Filters = {
 
 export const isFixed = (i: Issue): boolean => i.status === "fixed";
 
-export function applyFilters(issues: Issue[], f: Filters): Issue[] {
+/** Known from an earlier run, but this run did not look at it again (so it is not "failing now"). */
+export const isStale = (i: Issue, runId: string): boolean =>
+  Boolean(runId) && i.lastSeenRunId !== runId && i.status !== "fixed" && i.status !== "ignored";
+
+/** Fixed by this run's comparison (or by a re-check on it), as opposed to fixed long ago. */
+export const wasFixedNow = (i: Issue, runId: string): boolean => {
+  const last = i.statusHistory.at(-1);
+  return i.status === "fixed" && last?.to === "fixed" && last.runId === runId;
+};
+
+/** New, back after being fixed, or fixed since the previous run: what the Regression Radar shows. */
+export const isChange = (i: Issue, runId: string): boolean =>
+  ((i.status === "new" || i.status === "reopened") && !isStale(i, runId)) || wasFixedNow(i, runId);
+
+export function applyFilters(issues: Issue[], f: Filters, runId = ""): Issue[] {
   const q = f.query.trim().toLowerCase();
   return issues.filter((i) => {
     if (f.categories.length && !f.categories.includes(i.category)) return false;
     if (f.severities.length && !f.severities.includes(i.severity)) return false;
-    if (f.verdict === "fail" && (i.verdict !== "fail" || isFixed(i))) return false;
-    if (f.verdict === "unverified" && (i.verdict !== "unverified" || isFixed(i))) return false;
+    if (f.verdict === "fail" && (i.verdict !== "fail" || isFixed(i) || isStale(i, runId)))
+      return false;
+    if (
+      f.verdict === "unverified" &&
+      (i.verdict !== "unverified" || isFixed(i) || isStale(i, runId))
+    )
+      return false;
     if (f.verdict === "fixed" && !isFixed(i)) return false;
+    if (f.verdict === "stale" && !isStale(i, runId)) return false;
+    if (f.verdict === "changes" && !isChange(i, runId)) return false;
     // An issue seen on both viewports ("all") matches either viewport filter.
     if (f.viewport !== "all" && i.viewport !== "all" && i.viewport !== f.viewport) return false;
     if (f.page && i.pageUrl !== f.page) return false;

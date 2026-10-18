@@ -1,4 +1,9 @@
-import { evidenceKeyForRequest, normalizeEvidenceText, priorityScore } from "@webdoctor/core";
+import {
+  evidenceKeyForRequest,
+  isNotRechecked,
+  normalizeEvidenceText,
+  priorityScore,
+} from "@webdoctor/core";
 import type { Evidence, Issue, Report } from "@webdoctor/core";
 import { shortSelector } from "@webdoctor/rules";
 
@@ -269,8 +274,15 @@ export function toFixPrompt(report: Report, options: FixPromptOptions = {}): str
   };
   const { run } = report;
 
-  const failing = report.issues.filter((i) => i.verdict === "fail" && open(i));
-  const unverified = report.issues.filter((i) => i.verdict === "unverified" && open(i));
+  // problems known from an earlier scan that this scan did not look at again are not listed:
+  // they may well be fixed already
+  const current = (i: Issue) => open(i) && !isNotRechecked(i, run.id);
+  const failing = report.issues.filter((i) => i.verdict === "fail" && current(i));
+  const unverified = report.issues.filter((i) => i.verdict === "unverified" && current(i));
+  const notRechecked = report.issues.filter(
+    (i) => i.verdict === "fail" && open(i) && isNotRechecked(i, run.id),
+  );
+  const changes = run.summary && run.previousRunId ? run.summary : undefined;
   const fixedIssues = report.issues.filter((i) => i.status === "fixed");
   const findings = buildFindings(failing);
   const pagesScanned = new Set(report.pages.map((p) => p.url)).size;
@@ -311,6 +323,16 @@ export function toFixPrompt(report: Report, options: FixPromptOptions = {}): str
     `- Findings: **${findings.length}** (${(["critical", "high", "medium", "low", "info"] as const)
       .map((s) => `${findings.filter((f) => f.rep.severity === s).length} ${s}`)
       .join(", ")}), made of ${plural(failing.length, "occurrence")} in total`,
+    ...(changes
+      ? [
+          `- Since the previous scan: ${changes.new} new, ${changes.reopened} came back after being fixed, ${changes.fixedSinceLast} fixed.`,
+        ]
+      : []),
+    ...(notRechecked.length > 0
+      ? [
+          `- ${plural(notRechecked.length, "problem")} known from earlier scans ${notRechecked.length === 1 ? "was" : "were"} not rechecked in this one (their pages were not scanned) and ${notRechecked.length === 1 ? "is" : "are"} not listed below.`,
+        ]
+      : []),
     ...(run.sitemapUrls && run.sitemapUrls > pagesScanned
       ? [
           `- Coverage: ${pagesScanned} of ${run.sitemapUrls} pages in the sitemap were scanned (a sample spread across page types and languages), so other pages of the same templates may have the same problems.`,

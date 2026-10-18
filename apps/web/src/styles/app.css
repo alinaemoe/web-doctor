@@ -961,3 +961,102 @@ a.btn {
     animation: none;
   }
 }
+
+/* ---- run history / Regression Radar ---- */
+.site-history {
+  margin: 0 0 32px;
+}
+.site-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+.site-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.sparkline {
+  stroke: var(--accent);
+  fill: var(--accent);
+}
+.sparkline polyline {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.sparkline circle.last {
+  fill: var(--fg);
+}
+.delta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chip-delta {
+  display: inline-block;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--fg);
+}
+.chip-delta.ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.chip-delta.bad {
+  color: var(--sev-critical);
+  border-color: var(--sev-critical);
+}
+.history-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  padding: 6px 16px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.history-strip a {
+  margin-left: auto;
+}
+.tag {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.tag-ok {
+  color: var(--ok);
+}
+.tag-bad {
+  color: var(--sev-critical);
+  font-weight: 600;
+}
+.tag-muted {
+  color: var(--muted);
+}
+.history-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.history-list li {
+  margin: 4px 0;
+}
+.tabs {
+  flex-wrap: wrap;
+}
+.tabs button {
+  flex: 1 1 auto;
+  padding: 6px 6px;
+  font-size: 14px;
+}

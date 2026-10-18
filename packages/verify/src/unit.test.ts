@@ -87,6 +87,14 @@ describe("applyVerification", () => {
     expect(applyVerification(base, verification("still-failing"))).toBe(base);
   });
 
+  it("counts a re-check that still sees a carried-over problem as seen in this run", () => {
+    const stale = issue({ runId: "r2", lastSeenRunId: "r1", status: "open" });
+    const next = applyVerification(stale, verification("still-failing"));
+    expect(next).toMatchObject({ lastSeenRunId: "r2", status: "open" });
+    // an inconclusive check says nothing, so it stays "not rechecked"
+    expect(applyVerification(stale, verification("unverified"))).toBe(stale);
+  });
+
   it("reopens a fixed issue that fails again and leaves ignored issues alone", () => {
     expect(
       applyVerification(issue({ status: "fixed" }), verification("still-failing")).status,

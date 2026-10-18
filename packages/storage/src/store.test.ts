@@ -87,7 +87,11 @@ describe("openStore", () => {
     const store = openStore(":memory:");
     const report = makeReport("r1");
     store.saveReport(report);
-    expect(store.getReport("r1")).toEqual(report);
+    // the store adds the run summary (numbers shown in the history)
+    expect(store.getReport("r1")).toEqual({
+      ...report,
+      run: { ...report.run, summary: expect.objectContaining({ total: 3, failing: 3 }) },
+    });
     store.close();
   });
 

@@ -3,7 +3,7 @@ import type { Evidence, Issue } from "@webdoctor/core/shared";
 import { pathOf, priorityOf } from "../lib/model";
 import type { Model } from "../lib/model";
 import { t, unverifiedReasons } from "../lib/strings";
-import { isFixed } from "../lib/filters";
+import { isFixed, isStale } from "../lib/filters";
 import type { ListItem } from "../lib/filters";
 import { latestFor } from "../lib/verifyUi";
 import type { VerifyUi } from "../lib/verifyUi";
@@ -246,6 +246,15 @@ function GroupVerify({
   );
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  new: "New",
+  open: "Open",
+  reopened: "Back again",
+  fixed: "Fixed",
+  ignored: "Ignored",
+  unverified: "Couldn't verify",
+};
+
 export function IssueDetails({
   issue,
   model,
@@ -279,6 +288,14 @@ export function IssueDetails({
         <p className="notice warn">
           <strong>{t.unverified}.</strong> {unverifiedReasons[issue.unverifiedReason ?? ""] ?? ""}{" "}
           {t.unverifiedNote}
+        </p>
+      )}
+
+      {isStale(issue, model.report.run.id) && (
+        <p className="notice" role="note">
+          <strong>Not rechecked in this scan.</strong> This problem is known from an earlier scan,
+          but this scan did not look at its page again, so it may already be fixed. Press Re-verify
+          to find out.
         </p>
       )}
 
@@ -322,6 +339,22 @@ export function IssueDetails({
           </div>
         ))}
       </details>
+
+      {issue.statusHistory.length > 1 && (
+        <details className="fold">
+          <summary>History ({issue.statusHistory.length})</summary>
+          <ol className="history-list">
+            {issue.statusHistory.map((h, i) => (
+              <li key={i}>
+                <span className="mono small">{h.at.slice(0, 16).replace("T", " ")}</span>{" "}
+                {h.from ? `${STATUS_LABEL[h.from] ?? h.from} → ` : "First seen: "}
+                <strong>{STATUS_LABEL[h.to] ?? h.to}</strong>
+                {h.reason && <span className="muted"> — {h.reason}</span>}
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
 
       <details className="fold why-priority">
         <summary>{t.priority}</summary>

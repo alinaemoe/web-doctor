@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ReportSchema } from "@webdoctor/core";
+import { ReportSchema, isNotRechecked } from "@webdoctor/core";
 import type { Report } from "@webdoctor/core";
 import { expectedManifest, matchExpected, startDemoSite } from "@webdoctor/demo-site";
 import type { DemoSite } from "@webdoctor/demo-site";
@@ -15,6 +15,10 @@ const outDir = mkdtempSync(join(tmpdir(), "wd-e2e-"));
 let site: DemoSite;
 let broken: RunScanResult;
 let fixed: RunScanResult;
+
+/** What a run actually saw now: not fixed, and not merely carried over from an earlier run. */
+const seenNow = (r: Report) =>
+  r.issues.filter((i) => i.status !== "fixed" && !isNotRechecked(i, r.run.id));
 
 const crawledPaths = (r: Report) => [...new Set(r.pages.map((p) => new URL(p.url).pathname))];
 
@@ -108,13 +112,15 @@ describe("Broken Shop, broken mode", () => {
 describe("Broken Shop, fixed mode", () => {
   it("leaves only the unverifiable external link", () => {
     const result = matchExpected(
-      fixed.report.issues,
+      seenNow(fixed.report),
       expectedManifest.modes.fixed.issues,
       crawledPaths(fixed.report),
     );
     expect(result.missing).toEqual([]);
     expect(result.unexpected).toEqual([]);
-    expect(fixed.report.issues.filter((i) => i.verdict === "fail")).toEqual([]);
+    expect(seenNow(fixed.report).filter((i) => i.verdict === "fail")).toEqual([]);
+    // ...and the fixed problems are remembered as fixed, not forgotten
+    expect(fixed.report.issues.filter((i) => i.status === "fixed").length).toBeGreaterThan(100);
   });
 
   it("every issue left in fixed mode was already present (same fingerprint) when broken", () => {
@@ -128,6 +134,7 @@ describe("re-analyzing a saved run", () => {
     const again = await reanalyzeRun({ outDir, runId: broken.report.run.id });
 
     expect(again.report.run.id).not.toBe(broken.report.run.id);
+    expect(again.report.run.reanalyzedFrom).toBe(broken.report.run.id);
     const prints = (r: Report) => r.issues.map((i) => i.fingerprint).sort();
     expect(prints(again.report)).toEqual(prints(broken.report));
     expect(again.report.groups).toHaveLength(broken.report.groups.length);

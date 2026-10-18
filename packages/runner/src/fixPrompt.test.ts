@@ -338,3 +338,41 @@ describe("toFixPrompt", () => {
     expect(toFixPrompt(report([issue()]))).toContain("1 page scanned");
   });
 });
+
+describe("run history in the prompt", () => {
+  it("does not list problems this scan did not look at again, but says how many there are", () => {
+    const r = report([
+      issue({ id: "seen", title: "Seen now", lastSeenRunId: "r1", ruleId: "res.a" }),
+      issue({ id: "stale1", title: "Stale one", lastSeenRunId: "r0", ruleId: "res.b" }),
+      issue({ id: "stale2", title: "Stale two", lastSeenRunId: "r0", ruleId: "res.c" }),
+    ]);
+    const md = toFixPrompt(r);
+    expect(md).toContain("Seen now");
+    expect(md).not.toContain("Stale one");
+    expect(md).not.toContain("Stale two");
+    expect(md).toContain("2 problems known from earlier scans were not rechecked in this one");
+    expect(md).toContain("Findings: **1**");
+  });
+
+  it("says what changed since the previous scan", () => {
+    const r = report([issue()]);
+    r.run.previousRunId = "r0";
+    r.run.summary = {
+      total: 5,
+      failing: 3,
+      unverified: 0,
+      fixed: 2,
+      new: 2,
+      open: 0,
+      reopened: 1,
+      fixedSinceLast: 2,
+      notRechecked: 0,
+    };
+    expect(toFixPrompt(r)).toContain(
+      "Since the previous scan: 2 new, 1 came back after being fixed, 2 fixed.",
+    );
+    // a first run has nothing to compare with
+    r.run.previousRunId = undefined;
+    expect(toFixPrompt(r)).not.toContain("Since the previous scan");
+  });
+});

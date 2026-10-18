@@ -39,6 +39,8 @@ export interface DemoSite {
   setMode(mode: Mode): void;
   /** While true, `/flaky` answers 503 (a page that is unreachable on the next run). */
   setFlakyDown(down: boolean): void;
+  /** Make one path (for example "/cart") answer 503 until switched back. */
+  setPathDown(path: string, down: boolean): void;
   close(): Promise<void>;
 }
 
@@ -78,6 +80,8 @@ export async function startDemoSite(options: DemoOptions = {}): Promise<DemoSite
   const host = options.host ?? "127.0.0.1";
   let mode: Mode = options.mode ?? "broken";
   let flakyDown = false;
+  /** Paths that answer 503 (a page that is down during a scan). */
+  const downPaths = new Set<string>();
 
   // The "external" origin: another port is another origin; it always answers 429.
   const ext = createServer((req, res) => {
@@ -96,11 +100,25 @@ export async function startDemoSite(options: DemoOptions = {}): Promise<DemoSite
       if (kind === "mode" && (value === "broken" || value === "fixed")) mode = value;
       else if (kind === "flaky" && (value === "down" || value === "up"))
         flakyDown = value === "down";
-      else return send(req, res, 404, "text/plain", "unknown control");
-      return send(req, res, 200, "application/json", JSON.stringify({ mode, flakyDown }));
+      else if ((kind === "down" || kind === "up") && value) {
+        const target = decodeURIComponent(value);
+        if (kind === "down") downPaths.add(target);
+        else downPaths.delete(target);
+      } else return send(req, res, 404, "text/plain", "unknown control");
+      return send(
+        req,
+        res,
+        200,
+        "application/json",
+        JSON.stringify({ mode, flakyDown, down: [...downPaths] }),
+      );
     }
     if (req.method !== "GET" && req.method !== "HEAD") {
       return send(req, res, 405, "text/plain", "Method Not Allowed");
+    }
+
+    if (downPaths.has(path)) {
+      return send(req, res, 503, "text/plain", "Service Unavailable");
     }
 
     const category = /^\/category\/(cat-\d{2})$/.exec(path)?.[1];
@@ -176,6 +194,10 @@ export async function startDemoSite(options: DemoOptions = {}): Promise<DemoSite
     },
     setFlakyDown: (down) => {
       flakyDown = down;
+    },
+    setPathDown: (path, down) => {
+      if (down) downPaths.add(path);
+      else downPaths.delete(path);
     },
     close: async () => {
       await Promise.all([closeServer(main), closeServer(ext)]);

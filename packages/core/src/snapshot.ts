@@ -154,6 +154,8 @@ export interface ScanResult {
   partial: boolean;
   stopReason?: "canceled" | "timeout" | "max-pages";
   pages: PageSnapshot[];
+  /** True when external links beyond the cap were not checked. */
+  externalLinksCapped?: boolean;
   skipped: SkippedUrl[];
   linkChecks: Record<string, LinkCheck>;
   robots: TextResource;

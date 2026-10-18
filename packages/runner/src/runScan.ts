@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { closeSync, mkdirSync, openSync, writeFileSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ReportSchema, SCHEMA_VERSION } from "@webdoctor/core";
+import { ReportSchema, SCHEMA_VERSION, applyHistory, summarizeRun } from "@webdoctor/core";
 import type { Category, Report, ScanResult, ScanViewport, Severity } from "@webdoctor/core";
 import { analyze } from "@webdoctor/rules";
 import { FsArtifactStore, SCANNER_VERSION, scan } from "@webdoctor/scanner";
@@ -93,6 +93,7 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
       partial: result.partial,
       stopReason: result.stopReason,
       sitemapUrls: result.sitemap.locs.length,
+      externalLinksCapped: result.externalLinksCapped,
     },
     pages: result.pages.map((p) => ({
       url: p.url,
@@ -108,14 +109,46 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
     groups,
   });
 
+  const withHistory = withPreviousRun(report, outDir);
+
   return persistRun({
-    report,
+    report: withHistory,
     result,
     outDir,
     runDir,
     artifacts,
     formats: options.formats,
   });
+}
+
+/**
+ * Compares a fresh report with the previous run of the same site (if any): problems found again
+ * keep their history, problems that disappeared from a page that was scanned again become fixed,
+ * and problems on pages that were not looked at again are carried over as "not rechecked".
+ */
+export function withPreviousRun(report: Report, outDir: string, beforeStartedAt?: string): Report {
+  const store = openStore(join(outDir, "webdoctor.db"));
+  let previous: Report | undefined;
+  let previousId: string | undefined;
+  try {
+    previousId = store.findPreviousRun(
+      report.run.settings.startUrl,
+      beforeStartedAt ?? report.run.startedAt,
+    )?.id;
+    previous = previousId ? store.getReport(previousId) : undefined;
+  } finally {
+    store.close();
+  }
+  const issues = applyHistory(report, previous);
+  return {
+    ...report,
+    run: {
+      ...report.run,
+      previousRunId: previousId,
+      summary: summarizeRun(issues, report.run.id),
+    },
+    issues,
+  };
 }
 
 export interface PersistOptions {

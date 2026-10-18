@@ -4,6 +4,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cac } from "cac";
+import { isNotRechecked } from "@webdoctor/core";
 import { createApiServer } from "@webdoctor/api";
 import { openStore } from "@webdoctor/storage";
 import { verifyAndSave } from "@webdoctor/verify";
@@ -58,6 +59,7 @@ cli
   .option("--max-external <n>", "Max external addresses to check links of", { default: 100 })
   .option("--ignore-robots", "Do not obey robots.txt (only for sites you own)")
   .option("--ci", "Machine-friendly output")
+  .option("--new-only", "With --fail-on: only new or reopened problems count (regressions)")
   .option("--fail-on <severity>", "Exit with 1 if a failing issue has at least this severity")
   .action(async (url: string, flags: Record<string, unknown>) => {
     const viewports = list(String(flags.viewport)) as ScanViewport[];
@@ -114,8 +116,12 @@ cli
     }
 
     const { report, runDir } = result;
-    const failing = report.issues.filter((i) => i.verdict === "fail");
-    const unverified = report.issues.length - failing.length;
+    // what this scan actually saw: not fixed, not carried over from an earlier scan
+    const seenNow = report.issues.filter(
+      (i) => i.status !== "fixed" && i.status !== "ignored" && !isNotRechecked(i, report.run.id),
+    );
+    const failing = seenNow.filter((i) => i.verdict === "fail");
+    const unverified = seenNow.length - failing.length;
     const counts = (["critical", "high", "medium", "low", "info"] as const)
       .map((s) => `${failing.filter((i) => i.severity === s).length} ${s}`)
       .join(", ");
@@ -125,6 +131,12 @@ cli
     console.log(
       `Issues: ${failing.length} (${counts}); ${unverified} couldn't be verified; ${report.groups.length} root-cause groups`,
     );
+    const delta = report.run.summary;
+    if (report.run.previousRunId && delta) {
+      console.log(
+        `Since the previous scan: +${delta.new} new, -${delta.fixedSinceLast} fixed, ${delta.reopened} came back, ${delta.notRechecked} not rechecked`,
+      );
+    }
     if (report.run.sitemapUrls && report.run.sitemapUrls > report.pages.length / viewports.length) {
       console.log(
         `Coverage: the sitemap lists ${report.run.sitemapUrls} pages; a sample was scanned (raise --max-pages to see more).`,
@@ -134,7 +146,10 @@ cli
     if (formats.includes("md"))
       console.log(`Fix prompt for an AI agent: ${join(runDir, "fix-prompt.md")}`);
 
-    if (failOn && failing.some((i) => SEVERITY_RANK[i.severity] >= SEVERITY_RANK[failOn])) {
+    const counted = flags.newOnly
+      ? failing.filter((i) => i.status === "new" || i.status === "reopened")
+      : failing;
+    if (failOn && counted.some((i) => SEVERITY_RANK[i.severity] >= SEVERITY_RANK[failOn])) {
       process.exit(EXIT.issues);
     }
     process.exit(report.run.partial ? EXIT.partial : EXIT.ok);
@@ -267,6 +282,39 @@ cli
       console.log(`Reports: ${runDir}`);
     } catch (error) {
       fail((error as Error).message);
+    }
+  });
+
+cli
+  .command("history", "Show the runs of each site with what changed between them")
+  .option("--dir <dir>", "Directory with scan results", { default: ".webdoctor" })
+  .option("--site <origin>", "Only this site, e.g. https://example.com")
+  .action((flags: Record<string, unknown>) => {
+    const store = openStore(join(resolve(String(flags.dir)), "webdoctor.db"));
+    try {
+      const runs = store
+        .listRuns()
+        .filter((r) => !flags.site || r.site === String(flags.site).replace(/\/$/, ""));
+      if (runs.length === 0) return console.log("No runs yet. Run `webdoctor scan <url>` first.");
+
+      const bySite = new Map<string, typeof runs>();
+      for (const r of runs) bySite.set(r.site, [...(bySite.get(r.site) ?? []), r]);
+      for (const [site, list] of bySite) {
+        console.log(`\n${site}`);
+        console.log("  started (UTC)         failing   new  fixed  back  not rechecked  run");
+        for (const r of list) {
+          const s = r.summary;
+          const delta = r.previousRunId
+            ? `${String(s.new).padStart(4)} ${String(s.fixedSinceLast).padStart(6)} ${String(s.reopened).padStart(5)}  ${String(s.notRechecked).padStart(13)}`
+            : "   -      -     -              -";
+          console.log(
+            `  ${r.startedAt.slice(0, 19).replace("T", " ")}  ${String(s.failing).padStart(7)} ${delta}  ${r.id}${r.partial ? " (partial)" : ""}${r.reanalyzedFrom ? " (re-analyzed)" : ""}`,
+          );
+        }
+      }
+      console.log('\nnew / fixed / back are compared with the run before; "-" marks a first run.');
+    } finally {
+      store.close();
     }
   });
 

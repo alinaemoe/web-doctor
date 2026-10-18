@@ -6,7 +6,7 @@ import type { PageSnapshot, Report, ScanResult } from "@webdoctor/core";
 import { analyze } from "@webdoctor/rules";
 import { FsArtifactStore, SCANNER_VERSION } from "@webdoctor/scanner";
 import { openStore } from "@webdoctor/storage";
-import { persistRun, stamp } from "./runScan";
+import { persistRun, stamp, withPreviousRun } from "./runScan";
 import type { ReportFormat, RunScanResult } from "./runScan";
 
 export interface ReanalyzeOptions {
@@ -67,6 +67,9 @@ export async function reanalyzeRun(options: ReanalyzeOptions): Promise<RunScanRe
     run: {
       ...previous.run,
       id: runId,
+      previousRunId: undefined,
+      summary: undefined,
+      reanalyzedFrom: options.runId,
       scannerVersion: SCANNER_VERSION,
       finishedAt: new Date().toISOString(),
     },
@@ -75,8 +78,11 @@ export async function reanalyzeRun(options: ReanalyzeOptions): Promise<RunScanRe
     groups,
   });
 
+  // compare with the run that came before the source run, as the source run itself was
+  const withHistory = withPreviousRun(report, outDir, previous.run.startedAt);
+
   return persistRun({
-    report,
+    report: withHistory,
     result,
     outDir,
     runDir,

@@ -77,6 +77,12 @@ const MIGRATIONS: string[] = [
   `,
   // 3: sitemap size, for coverage
   `ALTER TABLE runs ADD COLUMN sitemap_urls INTEGER;`,
+  // 4: run history (comparison base, per-run numbers, link-check coverage)
+  `ALTER TABLE runs ADD COLUMN previous_run_id TEXT;
+   ALTER TABLE runs ADD COLUMN summary TEXT;
+   ALTER TABLE runs ADD COLUMN external_capped INTEGER;`,
+  // 5: runs made by `reanalyze` (not separate scans: they do not take part in history)
+  `ALTER TABLE runs ADD COLUMN reanalyzed_from TEXT;`,
 ];
 
 export function migrate(db: Database.Database): void {

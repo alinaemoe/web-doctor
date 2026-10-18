@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Report } from "@webdoctor/core/shared";
+import type { Issue, Report } from "@webdoctor/core/shared";
 import type { VerifyUi } from "../lib/verifyUi";
-import { applyFilters, buildList, defaultFilters, isFixed } from "../lib/filters";
+import {
+  applyFilters,
+  buildList,
+  defaultFilters,
+  isChange,
+  isFixed,
+  isStale,
+} from "../lib/filters";
 import type { Filters, ListItem } from "../lib/filters";
 import { buildModel } from "../lib/model";
 import { GroupDetails, IssueDetails } from "./Details";
@@ -33,6 +40,13 @@ function isTyping(target: EventTarget | null): boolean {
   );
 }
 
+/** The tab an issue is listed under, so a link to it opens on the right one. */
+function tabFor(issue: Issue, runId: string): Filters["verdict"] {
+  if (isFixed(issue)) return "fixed";
+  if (isStale(issue, runId)) return "stale";
+  return issue.verdict === "unverified" ? "unverified" : "fail";
+}
+
 export function Inspector({ report, initialIssueId, onIssueChange, verify }: Props) {
   const model = useMemo(() => buildModel(report), [report]);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -40,9 +54,7 @@ export function Inspector({ report, initialIssueId, onIssueChange, verify }: Pro
 
   const [filters, setFilters] = useState<Filters>(() => {
     const target = initialIssueId ? model.issuesById.get(initialIssueId) : undefined;
-    return target?.verdict === "unverified"
-      ? { ...defaultFilters, verdict: "all" }
-      : defaultFilters;
+    return target ? { ...defaultFilters, verdict: tabFor(target, report.run.id) } : defaultFilters;
   });
   const [sel, setSel] = useState<Selection>(() => {
     const target = initialIssueId ? model.issuesById.get(initialIssueId) : undefined;
@@ -50,7 +62,8 @@ export function Inspector({ report, initialIssueId, onIssueChange, verify }: Pro
     const items = buildList(
       applyFilters(
         model.issues,
-        target.verdict === "unverified" ? { ...defaultFilters, verdict: "all" } : defaultFilters,
+        { ...defaultFilters, verdict: tabFor(target, report.run.id) },
+        report.run.id,
       ),
       model,
       true,
@@ -64,16 +77,25 @@ export function Inspector({ report, initialIssueId, onIssueChange, verify }: Pro
   const [viewport, setViewport] = useState<ViewportName>("desktop");
   const [pageOverride, setPageOverride] = useState<string | null>(null);
 
-  const filtered = useMemo(() => applyFilters(model.issues, filters), [model, filters]);
+  const runId = report.run.id;
+  const filtered = useMemo(
+    () => applyFilters(model.issues, filters, runId),
+    [model, filters, runId],
+  );
   const items = useMemo(
     () => buildList(filtered, model, filters.grouped),
     [filtered, model, filters.grouped],
   );
 
   const counts = {
-    fail: model.issues.filter((i) => i.verdict === "fail" && !isFixed(i)).length,
-    unverified: model.issues.filter((i) => i.verdict === "unverified" && !isFixed(i)).length,
+    fail: model.issues.filter((i) => i.verdict === "fail" && !isFixed(i) && !isStale(i, runId))
+      .length,
+    unverified: model.issues.filter(
+      (i) => i.verdict === "unverified" && !isFixed(i) && !isStale(i, runId),
+    ).length,
     fixed: model.issues.filter(isFixed).length,
+    changes: model.issues.filter((i) => isChange(i, runId)).length,
+    stale: model.issues.filter((i) => isStale(i, runId)).length,
   };
 
   // The list row that is highlighted. With nothing chosen yet, the top row.
@@ -146,12 +168,15 @@ export function Inspector({ report, initialIssueId, onIssueChange, verify }: Pro
           shown={items.length}
           searchRef={searchRef}
           counts={counts}
+          hasPrevious={Boolean(report.run.previousRunId)}
         />
         <IssueList
           items={items}
           selectedKey={effectiveKey}
           onSelect={(key) => setSel({ key })}
           onHover={setHoverId}
+          runId={report.run.id}
+          hasPrevious={Boolean(report.run.previousRunId)}
         />
       </aside>
 

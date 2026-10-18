@@ -12,6 +12,7 @@ import type {
   ReportSchema,
   RunSchema,
   RunSettingsSchema,
+  RunSummarySchema,
   RunStatusSchema,
   SeveritySchema,
   StatusChangeSchema,
@@ -39,6 +40,7 @@ export type Issue = z.infer<typeof IssueSchema>;
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 export type RunSettings = z.infer<typeof RunSettingsSchema>;
 export type Run = z.infer<typeof RunSchema>;
+export type RunSummary = z.infer<typeof RunSummarySchema>;
 export type IssueGroup = z.infer<typeof IssueGroupSchema>;
 export type PageSummary = z.infer<typeof PageSummarySchema>;
 export type Report = z.infer<typeof ReportSchema>;

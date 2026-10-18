@@ -9,7 +9,18 @@ export function applyVerification(issue: Issue, v: Verification): Issue {
   let to: Status | null = null;
   if (v.outcome === "verified-fixed" && issue.status !== "fixed") to = "fixed";
   else if (v.outcome === "still-failing" && issue.status === "fixed") to = "reopened";
-  if (!to) return issue;
+  if (!to) {
+    // A re-check that still sees the problem is an observation made now: the problem is no
+    // longer merely "known from an earlier scan".
+    if (
+      v.outcome === "still-failing" &&
+      issue.lastSeenRunId !== issue.runId &&
+      issue.status !== "fixed"
+    ) {
+      return { ...issue, lastSeenRunId: issue.runId };
+    }
+    return issue;
+  }
 
   return {
     ...issue,

@@ -21,6 +21,8 @@ export const t = {
   groupBy: "Group by root cause",
   failing: "Failing",
   fixed: "Fixed",
+  changes: "Changes",
+  notRechecked: "Not rechecked",
   unverified: "Couldn't verify",
   all: "All",
   desktop: "Desktop",

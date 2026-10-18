@@ -11,6 +11,10 @@ export const runs = sqliteTable("runs", {
   partial: integer("partial", { mode: "boolean" }).notNull(),
   stopReason: text("stop_reason"),
   sitemapUrls: integer("sitemap_urls"),
+  previousRunId: text("previous_run_id"),
+  summary: text("summary", { mode: "json" }),
+  externalCapped: integer("external_capped", { mode: "boolean" }),
+  reanalyzedFrom: text("reanalyzed_from"),
 });
 
 export const pages = sqliteTable(

@@ -187,7 +187,9 @@ export class ScanManager {
       });
       j.job.runId = result.report.run.id;
       j.job.partial = result.report.run.partial;
-      j.job.failCount = result.report.issues.filter((i) => i.verdict === "fail").length;
+      j.job.failCount =
+        result.report.run.summary?.failing ??
+        result.report.issues.filter((i) => i.verdict === "fail").length;
       j.job.status = j.controller.signal.aborted ? "canceled" : "completed";
     } catch (error) {
       j.job.status = "failed";
