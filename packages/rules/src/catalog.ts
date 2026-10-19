@@ -193,6 +193,33 @@ export const RULE_CATALOG: Record<string, RuleInfo> = {
       "Find the element wider than the viewport and constrain it (max-width: 100%, wrapping, overflow).",
     verifyCriterion: "The document is not wider than the mobile viewport.",
   },
+  "nav.page.orphan": {
+    category: "seo",
+    severity: "low",
+    title: "Page cannot be reached by clicking links",
+    why: "Visitors and search engines that follow links never find this page. It is known only from the sitemap or a direct address, so it gets no traffic from the site itself.",
+    howToFix:
+      "Link to it from a relevant page or the navigation. If the page is obsolete, remove it and take it out of the sitemap.",
+    verifyCriterion: "At least one other page of the site links to this page.",
+  },
+  "nav.page.deep": {
+    category: "seo",
+    severity: "low",
+    title: "Page is buried deep in the site",
+    why: "Pages that need many clicks from the home page are rarely visited and are crawled less often by search engines.",
+    howToFix:
+      "Link the page from a higher-level page, a hub or the navigation, or add breadcrumbs and related links.",
+    verifyCriterion: "The page is at most 4 clicks from the home page.",
+  },
+  "nav.page.dead-end": {
+    category: "links-resources",
+    severity: "info",
+    title: "Page has no links to other pages of the site",
+    why: "A visitor who finishes reading has no next step, and the page passes nothing on to the rest of the site.",
+    howToFix:
+      "Add the site navigation, related links, or a link back to the section this page belongs to.",
+    verifyCriterion: "The page links to at least one other page of the site.",
+  },
 };
 
 export function infoFor(ruleId: string): RuleInfo | undefined {

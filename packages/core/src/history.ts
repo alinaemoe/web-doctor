@@ -46,9 +46,12 @@ export function issueCovered(issue: Issue, coverage: RunCoverage): boolean {
   // Only the first N external addresses are checked; a link not re-checked is not a fixed link.
   if (issue.ruleId === "link.external.broken" && coverage.externalLinksCapped) return false;
 
+  const seen = coverage.pages.get(pageKey(issue.pageUrl));
+  // "How pages link to each other" does not depend on the viewport: one look at the page is enough
+  if (issue.ruleId.startsWith("nav.")) return seen !== undefined && seen.size > 0;
+
   const needed: ScanViewport[] =
     issue.viewport === "all" ? ["desktop", "mobile"] : [issue.viewport];
-  const seen = coverage.pages.get(pageKey(issue.pageUrl));
   return seen !== undefined && needed.every((v) => seen.has(v));
 }
 

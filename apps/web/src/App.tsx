@@ -4,9 +4,10 @@ import { FixPromptButtons } from "./components/FixPromptButtons";
 import { NewScanPage } from "./components/NewScanPage";
 import { RunWorkspace } from "./components/RunWorkspace";
 import { RunsPage } from "./components/RunsPage";
+import { SiteMap } from "./components/SiteMap";
 import { fetchReport, fetchRuns, fetchVerifications, loadApp } from "./lib/api";
 import type { AppConfig, RunListItem } from "./lib/api";
-import { parseHash, runHash } from "./lib/route";
+import { mapHash, parseHash, runHash } from "./lib/route";
 import type { Route } from "./lib/route";
 import { t } from "./lib/strings";
 
@@ -65,6 +66,18 @@ function useLoad<T>(load: () => Promise<T>, key: string): Load<T> {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   return result;
+}
+
+function MapView({ id }: { id: string }) {
+  const loaded = useLoad<Report>(() => fetchReport(id), `map-${id}`);
+  if (loaded.state === "loading") return <p className="empty page-pad">{t.loading}</p>;
+  if (loaded.state === "error")
+    return (
+      <p className="empty page-pad" role="alert">
+        {loaded.message}
+      </p>
+    );
+  return <SiteMap report={loaded.data} />;
 }
 
 function RunView({ id, issue }: { id: string; issue?: string }) {
@@ -126,6 +139,11 @@ export function App() {
             {t.newScan}
           </a>
         ) : null}
+        {route.name === "run" && (
+          <a className="btn" href={mapHash(route.id)}>
+            Site map
+          </a>
+        )}
         {route.name === "run" && <FixPromptButtons runId={route.id} />}
         <span className="spacer" />
         {config?.mode === "public" && <span className="muted small">Public demo</span>}
@@ -156,6 +174,8 @@ export function App() {
         ) : (
           <p className="empty page-pad">{t.loading}</p>
         )
+      ) : route.name === "map" ? (
+        <MapView id={route.id} />
       ) : (
         <RunView id={route.id} issue={route.issue} />
       )}

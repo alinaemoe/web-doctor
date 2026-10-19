@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { ElementInfo, LinkCheck, PageSnapshot, ScanResult } from "@webdoctor/core";
-import { analyze } from "./analyze";
+import { analyze as analyzeAll } from "./analyze";
+import type { AnalyzeOptions } from "./analyze";
 import { isInactiveControl, summarizeFailure } from "./pageRules";
+
+/** These tests are about page rules; how pages link to each other is tested in graphRules.test.ts. */
+const analyze = (scan: ScanResult, options: AnalyzeOptions) => {
+  const result = analyzeAll(scan, options);
+  const page = (ruleId: string) => !ruleId.startsWith("nav.");
+  return {
+    ...result,
+    issues: result.issues.filter((i) => page(i.ruleId)),
+    groups: result.groups.filter((g) => page(g.ruleId)),
+  };
+};
 
 const el = (selector: string, extra: Partial<ElementInfo> = {}): ElementInfo => ({
   selector,

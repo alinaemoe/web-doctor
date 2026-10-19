@@ -1,12 +1,22 @@
 import { randomUUID } from "node:crypto";
 import {
+  buildPageGraph,
   computeFingerprint,
   evidenceKeyForRequest,
   normalizeEvidenceText,
   stableElementKey,
 } from "@webdoctor/core";
-import type { Category, Evidence, Issue, IssueGroup, ScanResult, Viewport } from "@webdoctor/core";
+import type {
+  Category,
+  Evidence,
+  Issue,
+  IssueGroup,
+  PageGraph,
+  ScanResult,
+  Viewport,
+} from "@webdoctor/core";
 import type { IssueDraft, SiteContext } from "./draft";
+import { graphRules } from "./graphRules";
 import { pageRules } from "./pageRules";
 import { stabilizeSelector } from "./selectors";
 import { siteRules } from "./siteRules";
@@ -21,6 +31,8 @@ export interface AnalyzeOptions {
 export interface AnalyzeResult {
   issues: Issue[];
   groups: IssueGroup[];
+  /** How the scanned pages link to each other. */
+  graph: PageGraph;
 }
 
 function elementKeyOf(evidence: Evidence[]): string {
@@ -115,7 +127,12 @@ export function analyze(scan: ScanResult, options: AnalyzeOptions): AnalyzeResul
   const now = options.now ?? new Date().toISOString();
   const site: SiteContext = { scan, check: (url) => scan.linkChecks[url] };
 
-  let drafts = [...scan.pages.flatMap((p) => pageRules(p, site)), ...siteRules(scan.pages, site)];
+  const graph = buildPageGraph(scan);
+  let drafts = [
+    ...scan.pages.flatMap((p) => pageRules(p, site)),
+    ...siteRules(scan.pages, site),
+    ...graphRules(graph, scan.pages),
+  ];
   if (options.categories) {
     const allowed = new Set(options.categories);
     drafts = drafts.filter((d) => allowed.has(d.category));
@@ -146,5 +163,5 @@ export function analyze(scan: ScanResult, options: AnalyzeOptions): AnalyzeResul
     };
   });
 
-  return { issues, groups: buildGroups(issues, options.runId) };
+  return { issues, groups: buildGroups(issues, options.runId), graph };
 }

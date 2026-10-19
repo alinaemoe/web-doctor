@@ -86,6 +86,8 @@ const MIGRATIONS: string[] = [
   // 6: public mode: who a run belongs to (null in local mode)
   `ALTER TABLE runs ADD COLUMN owner TEXT;
    CREATE INDEX runs_owner_idx ON runs (owner, started_at);`,
+  // 7: how the pages of the run link to each other (JSON)
+  `ALTER TABLE runs ADD COLUMN graph TEXT;`,
 ];
 
 export function migrate(db: Database.Database): void {

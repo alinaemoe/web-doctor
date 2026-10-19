@@ -216,6 +216,33 @@ export const IssueGroupSchema = z.object({
   affectedPages: z.number().int().nonnegative(),
 });
 
+export const GraphNodeSchema = z.object({
+  url: z.string(),
+  /** Fewest clicks from the home page along the links seen; missing = not reachable by clicks. */
+  depth: z.number().int().nonnegative().optional(),
+  /** Pages (scanned ones) that link here / internal pages this page links to. */
+  inbound: z.number().int().nonnegative(),
+  outbound: z.number().int().nonnegative(),
+  inSitemap: z.boolean(),
+  /** The page itself was loaded by the scan (otherwise it is only known from a link or sitemap). */
+  scanned: z.boolean(),
+  status: z.number().int().optional(),
+  /** Other pages reachable only through this one. */
+  dominates: z.number().int().positive().optional(),
+});
+
+/** Pages as nodes, links as `[from, to]` index pairs into `nodes`. */
+export const PageGraphSchema = z.object({
+  /** Index of the home page in `nodes`, -1 when unknown. */
+  home: z.number().int(),
+  nodes: z.array(GraphNodeSchema),
+  edges: z.array(z.tuple([z.number().int(), z.number().int()])),
+  /** Every page of the site was scanned, so "nobody links here" is a fact. */
+  complete: z.boolean(),
+  /** The site was bigger than what is stored. */
+  capped: z.boolean().optional(),
+});
+
 /** The JSON report format (TZ 6.14); validated in tests and by the CLI. */
 export const ReportSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
@@ -223,6 +250,7 @@ export const ReportSchema = z.object({
   pages: z.array(PageSummarySchema),
   issues: z.array(IssueSchema),
   groups: z.array(IssueGroupSchema),
+  graph: PageGraphSchema.optional(),
 });
 
 export const VerifyOutcomeSchema = z.enum(["verified-fixed", "still-failing", "unverified"]);

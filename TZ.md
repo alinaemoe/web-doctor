@@ -440,7 +440,7 @@ TypeScript везде; pnpm-монорепо; React + Vite; чистый CSS + �
 **M4 — History + Regression Radar (v2).** Run history, fingerprint-идентичность, сравнение двух запусков, статусы New/Open/Fixed/Reopened/Ignored, Network Detective.
 **M5 — Server mode.** ✅ Сделано: SSRF-защита (`packages/netguard`: IP-политика, pinned DNS, guarded fetch, прокси для Chromium) + e2e-матрица в реальном браузере, публичный режим (`webdoctor serve`: анонимные сессии, изоляция запусков по владельцу, лимиты/квоты, retention 24 ч), Docker/compose и `docs/security.md`, `docs/deploy.md`. **Отложено сознательно:** Postgres, Redis-очередь, S3 и несколько воркеров: для дешёвого VPS хватает одного контейнера с SQLite; хранилище и сканер уже за интерфейсами, переход — замена, а не переписывание.
 **M6 — Polish.** ✅ HTML-отчёт (был с M1), CI-режим (аннотации и job summary в GitHub Actions, `docs/ci.md`), самоаудит a11y UI через axe в тестах (light/dark/375px), документация, сценарий видео (`docs/demo-script.md`).
-**M7 (v3) — Углубление.** Lighthouse-модуль, Fix Preview + патчи, умные Root Cause (шаблоны страниц), page states, Responsive/Accessibility Journey (клавиатура, фокус), граф страниц.
+**M7 (v3) — Углубление.** Сделано: граф страниц (карта сайта в UI, правила orphan/deep/dead-end, узкие места, вес ссылок в приоритете). Lighthouse-модуль, Fix Preview + патчи, умные Root Cause (шаблоны страниц), page states, Responsive/Accessibility Journey (клавиатура, фокус), граф страниц.
 **Later:** аккаунты (GitHub OAuth), команды/роли, биллинг/квоты, shareable reports, интеграции Git, уведомления, расписания, опциональный ИИ-слой.
 
 ---

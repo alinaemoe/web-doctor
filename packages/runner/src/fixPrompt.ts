@@ -1,5 +1,6 @@
 import {
   evidenceKeyForRequest,
+  inboundByUrl,
   isNotRechecked,
   normalizeEvidenceText,
   priorityScore,
@@ -168,12 +169,13 @@ function patternsOf(issue: Issue): { key: string; label: string; html?: string }
   return [{ key: issue.ruleId, label: issue.title }];
 }
 
-function buildFindings(issues: Issue[]): Finding[] {
+function buildFindings(issues: Issue[], inbound: Map<string, number>): Finding[] {
   const byRule = new Map<string, Issue[]>();
   for (const issue of issues)
     byRule.set(issue.ruleId, [...(byRule.get(issue.ruleId) ?? []), issue]);
 
-  const priority = (i: Issue, pages = 1) => priorityScore(i.severity, i.confidence, pages).score;
+  const priority = (i: Issue, pages = 1) =>
+    priorityScore(i.severity, i.confidence, pages, inbound.get(i.pageUrl) ?? 0).score;
 
   return [...byRule.entries()]
     .map(([ruleId, list]) => {
@@ -284,7 +286,7 @@ export function toFixPrompt(report: Report, options: FixPromptOptions = {}): str
   );
   const changes = run.summary && run.previousRunId ? run.summary : undefined;
   const fixedIssues = report.issues.filter((i) => i.status === "fixed");
-  const findings = buildFindings(failing);
+  const findings = buildFindings(failing, inboundByUrl(report.graph));
   const pagesScanned = new Set(report.pages.map((p) => p.url)).size;
 
   const out: string[] = [];

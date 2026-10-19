@@ -78,7 +78,7 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
     onProgress: options.onProgress,
   });
 
-  const { issues, groups } = analyze(result, { runId, categories });
+  const { issues, groups, graph } = analyze(result, { runId, categories });
 
   const report: Report = ReportSchema.parse({
     schemaVersion: SCHEMA_VERSION,
@@ -113,6 +113,7 @@ export async function runScan(options: RunScanOptions): Promise<RunScanResult> {
     })),
     issues,
     groups,
+    graph,
   });
 
   const withHistory = withPreviousRun(report, outDir, undefined, options.owner);

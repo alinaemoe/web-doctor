@@ -1,4 +1,4 @@
-import { priorityScore } from "@webdoctor/core/shared";
+import { inboundByUrl, priorityScore } from "@webdoctor/core/shared";
 import type {
   Issue,
   IssueGroup,
@@ -18,6 +18,8 @@ export interface Model {
   pages: PageSummary[];
   /** Distinct page URLs that were scanned, in crawl order. */
   pageUrls: string[];
+  /** How many pages link to each page (empty when the run has no link graph). */
+  inbound: Map<string, number>;
 }
 
 export function buildModel(report: Report): Model {
@@ -28,12 +30,18 @@ export function buildModel(report: Report): Model {
     groupsById: new Map(report.groups.map((g) => [g.id, g])),
     pages: report.pages,
     pageUrls: [...new Set(report.pages.map((p) => p.url))],
+    inbound: inboundByUrl(report.graph),
   };
 }
 
 export function priorityOf(issue: Issue, model: Model): PriorityBreakdown {
   const affected = issue.groupId ? (model.groupsById.get(issue.groupId)?.affectedPages ?? 1) : 1;
-  return priorityScore(issue.severity, issue.confidence, affected);
+  return priorityScore(
+    issue.severity,
+    issue.confidence,
+    affected,
+    model.inbound.get(issue.pageUrl) ?? 0,
+  );
 }
 
 export function pathOf(url: string): string {

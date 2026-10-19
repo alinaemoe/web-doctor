@@ -76,6 +76,7 @@ ${o.body}
 </main>
 <footer>
   <a href="${footerLink}">Shipping policy</a>
+  ${broken ? "" : '<a href="/orphan">Archive</a>'}
 </footer>
 </body>
 </html>

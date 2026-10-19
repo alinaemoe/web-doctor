@@ -5,9 +5,11 @@ import type {
   EvidenceSchema,
   ExplanationSchema,
   FixSuggestionSchema,
+  GraphNodeSchema,
   IssueGroupSchema,
   IssueSchema,
   NodeSignatureSchema,
+  PageGraphSchema,
   PageSummarySchema,
   ReportSchema,
   RunSchema,
@@ -43,6 +45,8 @@ export type Run = z.infer<typeof RunSchema>;
 export type RunSummary = z.infer<typeof RunSummarySchema>;
 export type IssueGroup = z.infer<typeof IssueGroupSchema>;
 export type PageSummary = z.infer<typeof PageSummarySchema>;
+export type GraphNode = z.infer<typeof GraphNodeSchema>;
+export type PageGraph = z.infer<typeof PageGraphSchema>;
 export type Report = z.infer<typeof ReportSchema>;
 export type Verification = z.infer<typeof VerificationSchema>;
 export type VerifyOutcome = z.infer<typeof VerifyOutcomeSchema>;

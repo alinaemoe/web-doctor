@@ -58,7 +58,7 @@ export async function reanalyzeRun(options: ReanalyzeOptions): Promise<RunScanRe
     cpSync(join(sourceDir, "screenshots"), join(runDir, "screenshots"), { recursive: true });
   }
 
-  const { issues, groups } = analyze(result, {
+  const { issues, groups, graph } = analyze(result, {
     runId,
     categories: previous.run.settings.categories,
   });
@@ -76,6 +76,7 @@ export async function reanalyzeRun(options: ReanalyzeOptions): Promise<RunScanRe
     pages: previous.pages,
     issues,
     groups,
+    graph,
   });
 
   // compare with the run that came before the source run, as the source run itself was

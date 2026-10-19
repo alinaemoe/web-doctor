@@ -46,6 +46,14 @@ export const expectedManifest: ExpectedManifest = {
     broken: {
       issues: [
         {
+          ruleId: "nav.page.orphan",
+          pages: ["/orphan"],
+          severity: "low",
+          verdict: "fail",
+          viewport: "all",
+          note: "Listed only in the sitemap: no page links to it. Fixed mode links it from the footer.",
+        },
+        {
           ruleId: "res.img.failed",
           pages: ["/products/backpack"],
           severity: "high",

@@ -128,7 +128,7 @@ describe("expected-issues.json", () => {
     const known = new Set([...crawlablePaths, "/sitemap.xml"]);
     for (const mode of ["broken", "fixed"] as const) {
       for (const issue of expectedManifest.modes[mode].issues) {
-        expect(issue.ruleId).toMatch(/^(link|res|a11y|seo|runtime)\./);
+        expect(issue.ruleId).toMatch(/^(link|res|a11y|seo|runtime|nav)./);
         if (issue.pages !== "all-crawled") {
           for (const p of issue.pages) expect(known.has(p), p).toBe(true);
         }

@@ -4,7 +4,7 @@ import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cac } from "cac";
-import { isNotRechecked } from "@webdoctor/core";
+import { DEEP_CLICKS, isNotRechecked } from "@webdoctor/core";
 import { createApiServer } from "@webdoctor/api";
 import { openStore } from "@webdoctor/storage";
 import { verifyAndSave } from "@webdoctor/verify";
@@ -133,6 +133,15 @@ cli
     console.log(
       `Issues: ${failing.length} (${counts}); ${unverified} couldn't be verified; ${report.groups.length} root-cause groups`,
     );
+    if (report.graph) {
+      const { nodes, home, complete } = report.graph;
+      const scannedNodes = nodes.filter((n) => n.scanned);
+      const hidden = scannedNodes.filter((n) => n.depth === undefined && n !== nodes[home]).length;
+      const deep = scannedNodes.filter((n) => (n.depth ?? 0) >= DEEP_CLICKS).length;
+      console.log(
+        `Link structure: ${hidden} not reachable by clicks, ${deep} deeper than ${DEEP_CLICKS - 1} clicks${complete ? "" : " (tentative: not every page was scanned)"}`,
+      );
+    }
     const delta = report.run.summary;
     if (report.run.previousRunId && delta) {
       console.log(

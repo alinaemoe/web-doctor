@@ -311,3 +311,30 @@ describe("summarizeRun", () => {
     });
   });
 });
+
+describe("link-structure problems and coverage", () => {
+  const coverage = coverageOf({
+    run: { settings: { categories: ["seo"] } },
+    pages: [{ url: "https://site.test/p", status: 200, viewport: "desktop" }],
+  } as never);
+  const probe = (ruleId: string, viewport: "all" | "mobile") =>
+    ({ ruleId, category: "seo", pageUrl: "https://site.test/p", viewport }) as never;
+
+  it("needs just one look at the page, whatever the viewport", () => {
+    expect(issueCovered(probe("nav.page.orphan", "all"), coverage)).toBe(true);
+  });
+
+  it("still needs both viewports for an ordinary 'all' problem", () => {
+    expect(issueCovered(probe("seo.title.missing", "all"), coverage)).toBe(false);
+  });
+
+  it("does not call it covered when the page was not scanned at all", () => {
+    const other = {
+      ruleId: "nav.page.orphan",
+      category: "seo",
+      pageUrl: "https://site.test/x",
+      viewport: "all",
+    };
+    expect(issueCovered(other as never, coverage)).toBe(false);
+  });
+});

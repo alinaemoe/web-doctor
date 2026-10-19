@@ -129,6 +129,20 @@ result is marked less certain. Statuses and results are saved in the run's datab
 
 Not built yet: interactive DOM snapshots, page states, Lighthouse (see the roadmap in TZ.md).
 
+## Site map and link structure
+
+Every scan records which page links to which. The inspector's **Site map** (button on a run) lays the
+pages out by clicks from the home page, coloured by their worst problem, and lists bottlenecks (pages
+that others are reachable only through), the most linked pages and the deepest ones. Big sites are
+grouped into sections.
+
+Three rules use it: `nav.page.orphan` (no link path from the home page, e.g. a page that only the
+sitemap knows), `nav.page.deep` (5+ clicks from home) and `nav.page.dead-end` (no links to other
+pages). When not every page was scanned, "nobody links here" cannot be a fact, so those findings are
+reported as _couldn't verify_ instead of as failures. They also cannot be re-verified on one page:
+scan again. Problems on pages that many pages link to rank higher ("Why this priority?" shows the
+factor).
+
 ## CI
 
 `webdoctor scan <url> --ci --fail-on high --new-only` fails a build only on **new** problems and, in

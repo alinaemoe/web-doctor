@@ -1,4 +1,4 @@
-import { priorityScore } from "@webdoctor/core";
+import { inboundByUrl, priorityScore } from "@webdoctor/core";
 import type { Evidence, Issue, Report } from "@webdoctor/core";
 
 // ---------------------------------------------------------------------------- CSV
@@ -94,8 +94,8 @@ function groupSizes(report: Report): Map<string, number> {
   return new Map(report.groups.map((g) => [g.id, g.affectedPages]));
 }
 
-function issueCard(issue: Issue, affectedPages: number): string {
-  const score = priorityScore(issue.severity, issue.confidence, affectedPages);
+function issueCard(issue: Issue, affectedPages: number, inbound = 0): string {
+  const score = priorityScore(issue.severity, issue.confidence, affectedPages, inbound);
   const fix = issue.fix;
   return `<article class="issue sev-${issue.severity}${issue.verdict === "unverified" ? " unverified" : ""}">
 <header>
@@ -149,9 +149,15 @@ export function toHtml(report: Report, options: HtmlReportOptions = {}): string 
   const failing = report.issues.filter((i) => i.verdict === "fail");
   const unverified = report.issues.filter((i) => i.verdict === "unverified");
   const bySeverity = (s: string) => failing.filter((i) => i.severity === s).length;
-  const byPriority = (a: Issue, b: Issue) =>
-    priorityScore(b.severity, b.confidence, sizes.get(b.groupId ?? "") ?? 1).score -
-    priorityScore(a.severity, a.confidence, sizes.get(a.groupId ?? "") ?? 1).score;
+  const inbound = inboundByUrl(report.graph);
+  const scoreOf = (i: Issue) =>
+    priorityScore(
+      i.severity,
+      i.confidence,
+      sizes.get(i.groupId ?? "") ?? 1,
+      inbound.get(i.pageUrl) ?? 0,
+    ).score;
+  const byPriority = (a: Issue, b: Issue) => scoreOf(b) - scoreOf(a);
 
   const groupsHtml = report.groups.length
     ? report.groups
@@ -193,12 +199,12 @@ ${groupsHtml}
 ${
   failing
     .sort(byPriority)
-    .map((i) => issueCard(i, sizes.get(i.groupId ?? "") ?? 1))
+    .map((i) => issueCard(i, sizes.get(i.groupId ?? "") ?? 1, inbound.get(i.pageUrl) ?? 0))
     .join("\n") || "<p>No issues found.</p>"
 }
 <h2>Couldn't verify (${unverified.length})</h2>
 <p class="meta">These checks gave no reliable result (rate limits, blocking, timeouts). They are not necessarily broken.</p>
-${unverified.map((i) => issueCard(i, 1)).join("\n") || "<p>Nothing to report.</p>"}
+${unverified.map((i) => issueCard(i, 1, inbound.get(i.pageUrl) ?? 0)).join("\n") || "<p>Nothing to report.</p>"}
 <h2>Screenshots</h2>
 ${shots || "<p>No screenshots embedded.</p>"}
 </body></html>

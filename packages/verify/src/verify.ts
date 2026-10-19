@@ -106,6 +106,13 @@ function unverified(detail: string, reason: UnverifiedReason): Judgement {
 
 /** Decides what a fresh page snapshot says about one old issue. */
 function judge(issue: Issue, snapshot: PageSnapshot, site: SiteContext): Judgement {
+  // How pages are connected can only be seen by crawling the whole site again
+  if (issue.ruleId.startsWith("nav.")) {
+    return unverified(
+      "Links between pages can only be re-checked by a new scan of the site.",
+      "needs_manual_review",
+    );
+  }
   if (snapshot.status >= 400) {
     return unverified(
       `The page now answers ${snapshot.status}, so the check could not run.`,

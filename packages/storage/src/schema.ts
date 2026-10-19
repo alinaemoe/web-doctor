@@ -17,6 +17,8 @@ export const runs = sqliteTable("runs", {
   reanalyzedFrom: text("reanalyzed_from"),
   /** Public mode: hash of the session that started the run. Null in local mode. */
   owner: text("owner"),
+  /** Page link graph (JSON), see PageGraphSchema. */
+  graph: text("graph", { mode: "json" }),
 });
 
 export const pages = sqliteTable(

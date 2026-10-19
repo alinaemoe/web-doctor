@@ -360,8 +360,8 @@ export function IssueDetails({
         <summary>{t.priority}</summary>
         <p className="mono small">
           {p.severityWeight} (severity) × {p.confidence} (confidence) ×{" "}
-          {p.affectedPagesFactor.toFixed(2)} (1 + log2 of affected pages) ={" "}
-          <strong>{p.score}</strong>
+          {p.affectedPagesFactor.toFixed(2)} (1 + log2 of affected pages) ×{" "}
+          {p.importanceFactor.toFixed(2)} (how many pages link here) = <strong>{p.score}</strong>
         </p>
       </details>
     </article>

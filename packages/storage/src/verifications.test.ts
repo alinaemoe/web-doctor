@@ -118,7 +118,7 @@ describe("verification persistence", () => {
       const db = new Database(join(dir, "old.db"));
       db.exec("CREATE TABLE runs (id TEXT PRIMARY KEY, started_at TEXT); PRAGMA user_version = 1;");
       migrate(db);
-      expect(db.pragma("user_version", { simple: true })).toBe(6);
+      expect(db.pragma("user_version", { simple: true })).toBe(7);
       expect(db.prepare("select count(*) as n from verifications").get()).toEqual({ n: 0 });
       db.close();
     } finally {

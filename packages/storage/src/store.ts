@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { desc, eq, inArray, lt, sql } from "drizzle-orm";
 import {
+  PageGraphSchema,
   ReportSchema,
   RunSummarySchema,
   SCHEMA_VERSION,
@@ -115,6 +116,7 @@ export function openStore(path: string): Store {
           externalCapped: parsed.run.externalLinksCapped ?? null,
           reanalyzedFrom: parsed.run.reanalyzedFrom ?? null,
           owner: owner ?? null,
+          graph: parsed.graph ?? null,
         })
         .run();
 
@@ -186,6 +188,7 @@ export function openStore(path: string): Store {
       reanalyzedFrom: run.reanalyzedFrom ?? undefined,
       summary: run.summary ? RunSummarySchema.parse(run.summary) : undefined,
     };
+    const graph = run.graph ? PageGraphSchema.parse(run.graph) : undefined;
     const pageRows: PageSummary[] = db
       .select()
       .from(pages)
@@ -244,6 +247,7 @@ export function openStore(path: string): Store {
       pages: pageRows,
       issues: issueRows,
       groups: groupRows,
+      graph,
     });
   };
 

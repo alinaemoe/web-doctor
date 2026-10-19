@@ -67,6 +67,7 @@ const screens: [string, () => string][] = [
   ["runs list", () => "#/"],
   ["new scan", () => "#/new"],
   ["run workspace", () => `#/runs/${encodeURIComponent(runId)}`],
+  ["site map", () => `#/runs/${encodeURIComponent(runId)}/map`],
   [
     "issue details",
     () => `#/runs/${encodeURIComponent(runId)}?issue=${encodeURIComponent(issueId)}`,

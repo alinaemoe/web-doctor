@@ -19,7 +19,9 @@ let report: Report;
 const dir = mkdtempSync(join(tmpdir(), "wd-verify-"));
 const RUN = "run-verify";
 
-const failing = () => report.issues.filter((i) => i.verdict === "fail");
+// How pages link to each other (nav.*) can only be re-checked by a new scan, see below
+const isPageProblem = (i: Issue) => !i.ruleId.startsWith("nav.");
+const failing = () => report.issues.filter((i) => i.verdict === "fail" && isPageProblem(i));
 const oneOfEachRule = (): Issue[] => {
   const seen = new Map<string, Issue>();
   for (const i of failing()) if (!seen.has(i.ruleId)) seen.set(i.ruleId, i);
@@ -99,13 +101,22 @@ describe("Verify Fix on Broken Shop", () => {
 
     const saved = store.getReport(RUN)!;
     expect(
-      saved.issues.filter((i) => i.verdict === "fail").every((i) => i.status === "fixed"),
+      saved.issues
+        .filter((i) => i.verdict === "fail" && isPageProblem(i))
+        .every((i) => i.status === "fixed"),
     ).toBe(true);
     const history = saved.issues[0]!.statusHistory;
     expect(history.at(-1)).toMatchObject({ to: "fixed" });
     expect(history.at(-1)!.reason).toContain("Re-verified");
     expect(store.listVerifications(RUN).length).toBeGreaterThan(all.length);
   }, 240_000);
+
+  it("never calls a link-structure problem fixed: it needs a new scan", async () => {
+    const nav = report.issues.find((i) => i.ruleId.startsWith("nav."));
+    expect(nav, "Broken Shop has an orphan page").toBeDefined();
+    const { results } = await verifyAndSave(store, RUN, [nav!.id]);
+    expect(results[0]).toMatchObject({ outcome: "unverified", reason: "needs_manual_review" });
+  }, 60_000);
 
   it("leaves the external 429 link unverified: it is not something the site can fix", async () => {
     const ext = report.issues.find((i) => i.ruleId === "link.external.broken")!;
