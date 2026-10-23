@@ -1,12 +1,43 @@
 # Web Doctor
 
-A visual debugging workspace for websites: find a problem, see it on the real page, understand it,
-fix it, **re-verify** it, and track it over time. See [TZ.md](TZ.md) for the full specification.
+**Find a website problem, see it on the real page, fix it, and prove the fix worked.**
 
-> Status: **M6 — polished MVP.** Paste an address, get a crawled report,
-> re-verify fixes, track history, export a Markdown task for an AI coding agent — locally, or on a
-> public server where strangers can scan without being able to reach private networks
-> ([docs/security.md](docs/security.md), [docs/deploy.md](docs/deploy.md)).
+Web Doctor crawls a site in a real browser (Playwright, desktop and mobile viewports), reports
+accessibility, link, SEO, navigation and runtime problems with annotated screenshots, then lets you
+**re-verify** a single issue after you fix it and **track regressions over time**. It also exports a
+ready-made Markdown task for an AI coding agent. Use it locally, in CI, or as a public scanner that
+strangers can use without being able to touch your private network.
+
+> Status: polished MVP (M6) plus site map and link-structure analysis (M7, in progress).
+> Full specification: [TZ.md](TZ.md).
+
+## Highlights
+
+- **Regression Radar.** Every scan is diffed against the previous one by issue fingerprint:
+  *New / Open / Fixed / Reopened / Not rechecked*. A smaller sample, a page that is down or a
+  different category set can never make problems look "fixed".
+- **Verify one fix, not the whole site.** Press *Re-verify* on an issue (or run
+  `webdoctor verify <id>`): only that page and rule are re-checked. Outcomes are *Verified fixed*,
+  *Still failing* or *Couldn't verify*, and unloadable pages are never reported as fixed.
+- **Built to be pointed at the internet safely.** The public mode ships an SSRF guard (IP policy,
+  pinned DNS, guarded fetch, browser proxy) so visitors cannot scan loopback, LAN, cloud metadata or
+  the Docker network. Threat model: [docs/security.md](docs/security.md).
+- **Prompt for your AI agent.** Each scan writes `fix-prompt.md`: root causes first, then single
+  problems, each with location, fix, example code and a "done when" check. Text copied from the
+  scanned site is fenced and labelled as data, so a hostile page cannot instruct your agent.
+- **Site map and link structure.** Pages laid out by clicks from home, coloured by worst problem;
+  orphan, too-deep and dead-end pages are detected, and "couldn't verify" is reported instead of a
+  false failure when only part of the site was scanned.
+- **CI mode.** `webdoctor scan <url> --ci --fail-on high --new-only` fails a build only on new
+  problems and writes GitHub Actions annotations and a job summary ([docs/ci.md](docs/ci.md)).
+- **Tested like a product.** 44 test files, including a full end-to-end scan of **Broken Shop**, a
+  demo site with intentional defects and an `expected-issues.json` the scanner must match. The
+  inspector UI audits itself with axe (WCAG A/AA, light and dark, 375 px).
+
+## Tech
+
+TypeScript monorepo (pnpm workspaces) - Node 22, Playwright + axe-core, Fastify API, React 19 + Vite
+inspector, SQLite via Drizzle, Zod models, Vitest.
 
 ## Quick start
 
