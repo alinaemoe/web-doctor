@@ -221,7 +221,3 @@ The defects the scanner must find (and how fixed mode differs) are listed in
 ```bash
 pnpm --filter @webdoctor/demo-site gen:expected
 ```
-
-## License
-
-MIT

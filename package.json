@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "description": "Web Doctor — a visual debugging workspace for websites.",
-  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.11.2",
   "engines": {
