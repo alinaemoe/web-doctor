@@ -11,6 +11,9 @@ strangers can use without being able to touch your private network.
 > Status: polished MVP (M6) plus site map and link-structure analysis (M7, in progress).
 > Full specification: [TZ.md](TZ.md).
 
+<p align="center"><img src="docs/screenshots/inspector.gif" alt="Web Doctor inspector: stepping through issues with j/k, switching desktop and mobile" width="100%"></p>
+
+<p align="center"><sub>Scanning the bundled demo site "Broken Shop": 28 pages, 116 findings, grouped by root cause.</sub></p>
 ## Highlights
 
 - **Regression Radar.** Every scan is diffed against the previous one by issue fingerprint:
@@ -33,6 +36,15 @@ strangers can use without being able to touch your private network.
 - **Tested like a product.** 44 test files, including a full end-to-end scan of **Broken Shop**, a
   demo site with intentional defects and an `expected-issues.json` the scanner must match. The
   inspector UI audits itself with axe (WCAG A/AA, light and dark, 375 px).
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Issue with annotated screenshot and fix guidance](docs/screenshots/a11y-issue.png) | ![Dark theme](docs/screenshots/dark-theme.png) |
+| **Every finding is shown on the real page**, with how to fix it and a "fixed when" condition. | **Light and dark themes**, keyboard-first (`j`/`k`, `/`). |
+| ![Site map by clicks from home](docs/screenshots/site-map.png) | ![Mobile viewport](docs/screenshots/mobile-viewport.png) |
+| **Site map**: pages by clicks from home, coloured by worst problem; orphans and bottlenecks listed. | **Desktop and mobile** viewports are scanned and shown side by side. |
 
 ## Tech
 
