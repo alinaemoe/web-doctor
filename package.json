@@ -2,7 +2,7 @@
   "name": "web-doctor-monorepo",
   "private": true,
   "version": "0.0.0",
-  "description": "Web Doctor — a visual debugging workspace for websites.",
+  "description": "Web Doctor \u2014 a visual debugging workspace for websites.",
   "type": "module",
   "packageManager": "pnpm@12.11.2",
   "engines": {
@@ -16,7 +16,8 @@
     "test": "pnpm -r --if-present test",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
     "demo": "pnpm --filter @webdoctor/demo-site start",
-    "webdoctor": "tsx apps/cli/src/main.ts"
+    "webdoctor": "tsx apps/cli/src/main.ts",
+    "docs:capture": "pnpm --filter @webdoctor/cli run docs:capture"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

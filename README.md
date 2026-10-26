@@ -53,14 +53,41 @@ pnpm webdoctor ui                             # open the printed link (it contai
 In the inspector: pick an issue, press **Re-verify**; `curl -X POST http://127.0.0.1:4000/__demo/mode/fixed`
 switches the demo site to its fixed state, so re-verify turns issues into _Verified fixed_.
 
+## Tour
+
+**Fix it, press Re-verify, get a verdict.** The demo site is switched to its fixed state and the one
+problem is re-checked in a real browser: _Verified fixed_, with the result kept in the run.
+
+<p align="center"><img src="docs/screenshots/verify-fix.gif" alt="Re-verifying one issue after the site was fixed: Verified fixed" width="100%"></p>
+
+**Regression Radar.** Three scans of the same site: broken, fixed (-117), broken again (117 came back as
+_Reopened_, not _New_). Each run shows what changed since the previous one.
+
+<p align="center"><img src="docs/screenshots/regression-radar.gif" alt="Runs list with a trend, then the fixed run and the run where problems came back" width="100%"></p>
+
+**A public server that refuses private targets.** Cloud metadata, a non-web port on localhost and a LAN
+address are rejected with a clear message before anything is fetched; the allow-listed demo site is
+scanned normally.
+
+<p align="center"><img src="docs/screenshots/public-ssrf.gif" alt="Public mode refusing 169.254.169.254, localhost:3000 and 10.0.0.5, then scanning the demo" width="100%"></p>
+
+**Scan from the browser.** Paste an address and watch the scan (a timelapse: the demo scan takes under a
+minute), then open the results.
+
+<p align="center"><img src="docs/screenshots/new-scan.gif" alt="Starting a scan from the inspector, the live progress screen and the finished run" width="100%"></p>
+
 ## Screenshots
 
 |                                                                                                                   |                                                                                              |
 | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | ![Issue with annotated screenshot and fix guidance](docs/screenshots/a11y-issue.png)                              | ![Dark theme](docs/screenshots/dark-theme.png)                                               |
 | **Findings are shown on the real page**, with a "fixed when" condition and a Re-verify button.                    | **Light and dark themes**, keyboard-first (`j`/`k`, `/`).                                    |
+| ![Regression Radar: the Changes tab of a run where problems came back](docs/screenshots/regression-radar.png)     | ![Runs with a trend per site](docs/screenshots/runs-history.png)                             |
+| **Changes since the previous scan**: "117 back" and a "back" tag on each reopened problem.                        | **History per site**: trend, open problems and what changed in every run.                    |
 | ![Site map by clicks from home](docs/screenshots/site-map.png)                                                    | ![Mobile viewport](docs/screenshots/mobile-viewport.png)                                     |
 | **Site map**: pages by clicks from home, coloured by worst problem; pages no link leads to are listed separately. | **Mobile viewport**: a mobile-only horizontal overflow with the measurement and the element. |
+
+<sub>All images are generated from the real product by `pnpm docs:capture` (it scans the demo site and drives the inspector with Playwright).</sub>
 
 ## How it works
 
@@ -238,7 +265,7 @@ pnpm --filter @webdoctor/scanner exec playwright install chromium   # once
 pnpm check          # format:check + lint + typecheck + all tests (includes full e2e scans, a few minutes)
 ```
 
-For UI work: `pnpm webdoctor ui --token dev` and `pnpm --filter @webdoctor/web dev`, then open
+`pnpm docs:capture` regenerates every image in `docs/screenshots` (about ten minutes). For UI work: `pnpm webdoctor ui --token dev` and `pnpm --filter @webdoctor/web dev`, then open
 `http://localhost:5173/?token=dev`. The local API listens on `127.0.0.1` only, requires the token and
 rejects non-loopback `Host` headers.
 

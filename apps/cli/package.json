@@ -9,7 +9,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "docs:capture": "tsx scripts/capture-docs.ts"
   },
   "dependencies": {
     "@webdoctor/api": "workspace:*",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "axe-core": "^4.14.0",
-    "playwright": "^1.64.0"
+    "playwright": "^1.64.0",
+    "sharp": "^0.35.5"
   }
 }
