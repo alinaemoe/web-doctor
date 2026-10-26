@@ -2,234 +2,265 @@
 
 **Find a website problem, see it on the real page, fix it, and prove the fix worked.**
 
-Web Doctor crawls a site in a real browser (Playwright, desktop and mobile viewports), reports
-accessibility, link, SEO, navigation and runtime problems with annotated screenshots, then lets you
-**re-verify** a single issue after you fix it and **track regressions over time**. It also exports a
-ready-made Markdown task for an AI coding agent. Use it locally, in CI, or as a public scanner that
-strangers can use without being able to touch your private network.
-
-> Status: polished MVP (M6) plus site map and link-structure analysis (M7, in progress).
-> Full specification: [TZ.md](TZ.md).
+Web Doctor crawls a site in a real browser (Playwright, desktop and mobile), reports accessibility,
+link, SEO, navigation and runtime problems with the offending element outlined on a screenshot,
+re-checks a single issue after you fix it, and diffs every scan against the previous one. It runs
+locally, in CI, or as a public scanner that strangers can use without being able to reach your
+private network. It also exports a Markdown task for an AI coding agent.
 
 <p align="center"><img src="docs/screenshots/inspector.gif" alt="Web Doctor inspector: stepping through issues with j/k, switching desktop and mobile" width="100%"></p>
 
-<p align="center"><sub>Scanning the bundled demo site "Broken Shop": 28 pages, 116 findings, grouped by root cause.</sub></p>
-## Highlights
+<p align="center"><sub>The bundled demo site "Broken Shop": 28 pages, scanned at desktop and mobile size (56 page snapshots), collapsed into 4 root-cause groups.</sub></p>
 
-- **Regression Radar.** Every scan is diffed against the previous one by issue fingerprint:
-  *New / Open / Fixed / Reopened / Not rechecked*. A smaller sample, a page that is down or a
-  different category set can never make problems look "fixed".
-- **Verify one fix, not the whole site.** Press *Re-verify* on an issue (or run
-  `webdoctor verify <id>`): only that page and rule are re-checked. Outcomes are *Verified fixed*,
-  *Still failing* or *Couldn't verify*, and unloadable pages are never reported as fixed.
-- **Built to be pointed at the internet safely.** The public mode ships an SSRF guard (IP policy,
-  pinned DNS, guarded fetch, browser proxy) so visitors cannot scan loopback, LAN, cloud metadata or
-  the Docker network. Threat model: [docs/security.md](docs/security.md).
-- **Prompt for your AI agent.** Each scan writes `fix-prompt.md`: root causes first, then single
-  problems, each with location, fix, example code and a "done when" check. Text copied from the
-  scanned site is fenced and labelled as data, so a hostile page cannot instruct your agent.
-- **Site map and link structure.** Pages laid out by clicks from home, coloured by worst problem;
-  orphan, too-deep and dead-end pages are detected, and "couldn't verify" is reported instead of a
-  false failure when only part of the site was scanned.
-- **CI mode.** `webdoctor scan <url> --ci --fail-on high --new-only` fails a build only on new
-  problems and writes GitHub Actions annotations and a job summary ([docs/ci.md](docs/ci.md)).
-- **Tested like a product.** 44 test files, including a full end-to-end scan of **Broken Shop**, a
-  demo site with intentional defects and an `expected-issues.json` the scanner must match. The
-  inspector UI audits itself with axe (WCAG A/AA, light and dark, 375 px).
+## What makes it different
 
-## Screenshots
+- **It does not lie about "fixed".** Scans of one site are compared by issue fingerprint into
+  _New / Open / Fixed / Reopened / Not rechecked_. A problem that is merely absent from the new scan
+  is only _Fixed_ if its page was scanned again in every viewport it was seen in; otherwise it stays
+  _Not rechecked_. A smaller sample, a page that is down or a disabled category can never look like
+  a clean bill of health, so `--new-only` in CI is trustworthy. [Details](#design-decisions)
+- **Safe to expose to the internet.** `webdoctor serve` refuses loopback, LAN, cloud-metadata and
+  Docker-network targets with one policy applied to every connection (pinned DNS, guarded `fetch`,
+  a forced proxy for Chromium). It is proven by a real-Chromium test where a hostile page tries to
+  reach an internal server and, as a control, succeeds when the guard is removed. Threat model:
+  [docs/security.md](docs/security.md).
+- **Honest about uncertainty.** Every issue has a severity _and_ a confidence, and a verdict of
+  `fail` or `unverified` with a reason. An external link answering 429 is "couldn't verify", never
+  "broken"; link-structure findings on a partial scan are tentative.
+- **A fix prompt that cannot be hijacked.** `fix-prompt.md` is a task for an AI agent. Text copied
+  from the scanned site is fenced as data, so a hostile page cannot instruct your agent. Calibrated
+  on a real 50-page production site, grouping axe findings per rule and page shrank the prompt from
+  4427 issues / 477 KB to 688 issues / 26 KB (see `git show 5b308a4`).
+- **Tested like a product.** 468 tests in 44 files. A full end-to-end scan of the demo site must find
+  its documented defects (`expected-issues.json`, 20 in broken mode) with at least 90% recall and
+  nothing unexpected. The inspector audits itself with axe (WCAG A/AA, light and dark, 375 px) and
+  fails on critical or serious findings.
 
-| | |
-|---|---|
-| ![Issue with annotated screenshot and fix guidance](docs/screenshots/a11y-issue.png) | ![Dark theme](docs/screenshots/dark-theme.png) |
-| **Every finding is shown on the real page**, with how to fix it and a "fixed when" condition. | **Light and dark themes**, keyboard-first (`j`/`k`, `/`). |
-| ![Site map by clicks from home](docs/screenshots/site-map.png) | ![Mobile viewport](docs/screenshots/mobile-viewport.png) |
-| **Site map**: pages by clicks from home, coloured by worst problem; orphans and bottlenecks listed. | **Desktop and mobile** viewports are scanned and shown side by side. |
+## Try it in a minute
 
-## Tech
-
-TypeScript monorepo (pnpm workspaces) - Node 22, Playwright + axe-core, Fastify API, React 19 + Vite
-inspector, SQLite via Drizzle, Zod models, Vitest.
-
-## Quick start
+Needs Node 22+ and pnpm. The first run downloads Chromium.
 
 ```bash
 pnpm install
 pnpm --filter @webdoctor/scanner exec playwright install chromium
 pnpm --filter @webdoctor/web build
-pnpm webdoctor ui          # open the printed link, press "New scan", paste your site's address
+
+pnpm demo &                                   # Broken Shop, a site with deliberate defects, on :4000
+pnpm webdoctor scan http://127.0.0.1:4000     # crawl both viewports, write reports to .webdoctor/
+pnpm webdoctor ui                             # open the printed link (it contains the access token)
 ```
 
-## Layout
+In the inspector: pick an issue, press **Re-verify**; `curl -X POST http://127.0.0.1:4000/__demo/mode/fixed`
+switches the demo site to its fixed state, so re-verify turns issues into _Verified fixed_.
 
-| Path                 | What                                                                         |
-| -------------------- | ---------------------------------------------------------------------------- |
-| `packages/core`      | Issue model (zod), scanner snapshot types, URL normalization, fingerprints   |
-| `packages/scanner`   | Playwright crawler: pages x viewports, screenshots (WebP), axe, link checks  |
-| `packages/rules`     | Rules, explanation catalog, merging across viewports, root-cause groups      |
-| `packages/storage`   | Drizzle schema + SQLite store (`better-sqlite3`), hand-written migrations    |
-| `packages/demo-site` | **Broken Shop**: demo site with intentional defects + `expected-issues.json` |
-| `packages/netguard`  | SSRF guard: IP policy, pinned DNS, guarded fetch, browser proxy              |
-| `apps/cli`           | `webdoctor scan`, JSON / CSV / HTML reports                                  |
+## Screenshots
 
-## Develop
+|                                                                                                                   |                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| ![Issue with annotated screenshot and fix guidance](docs/screenshots/a11y-issue.png)                              | ![Dark theme](docs/screenshots/dark-theme.png)                                               |
+| **Findings are shown on the real page**, with a "fixed when" condition and a Re-verify button.                    | **Light and dark themes**, keyboard-first (`j`/`k`, `/`).                                    |
+| ![Site map by clicks from home](docs/screenshots/site-map.png)                                                    | ![Mobile viewport](docs/screenshots/mobile-viewport.png)                                     |
+| **Site map**: pages by clicks from home, coloured by worst problem; pages no link leads to are listed separately. | **Mobile viewport**: a mobile-only horizontal overflow with the measurement and the element. |
 
-Requires Node >= 22 and pnpm.
+## How it works
 
-```bash
-pnpm install
-pnpm --filter @webdoctor/scanner exec playwright install chromium   # once
-pnpm check          # format:check + lint + typecheck + test (incl. a full e2e scan, ~1 min)
+```mermaid
+flowchart LR
+  CLI["CLI: scan, verify, export, serve"] --> R
+  UI["Inspector UI (React)"] --> API["Fastify API: local token or public sessions"] --> R
+  R["runner: scan, analyze, history, persist"] --> S["scanner: Playwright crawler + axe"]
+  S -. "public mode only" .-> G["netguard: IP policy, pinned DNS, guarded fetch, browser proxy"]
+  G --> T[("Scanned site")]
+  S --> T
+  S --> P["page snapshots (JSON)"] --> RU["rules: 23 rules + every axe rule, root-cause groups, link graph"]
+  RU --> H["history: Regression Radar"] --> DB[("SQLite + run files")]
+  API --> V["verify: re-check one issue"] --> S
 ```
 
-## Scan a site
+1. **Crawl** (`packages/scanner`): breadth-first from the start page, seeded from `sitemap.xml`
+   (indexes expanded, sampled across templates and languages when it does not fit). Each page is
+   loaded per viewport; the scanner stores a screenshot, the DOM facts, network, console and axe
+   results. External links that fail for a script are re-checked in a real browser before they are
+   reported.
+2. **Rules** (`packages/rules`): pure functions over the snapshots, so they are unit-tested without a
+   browser. 23 hand-written rules (links, resources, SEO, runtime, navigation) plus every axe-core
+   rule, merged across viewports and grouped into root-cause hypotheses.
+3. **History** (`packages/core`): fingerprint = hash(rule, page, element, evidence). Runs of one
+   origin are chained and diffed; `webdoctor reanalyze` re-runs newer rules over a saved run.
+4. **Verify Fix** (`packages/verify`): re-collect only the page behind an issue, re-run only that
+   rule, match the old element by fingerprint and then by node signature; partial fixes report
+   "N of M elements remain".
+5. **Storage**: SQLite through Drizzle with hand-written, `user_version`-guarded migrations (7 so far);
+   raw snapshots stay on disk as NDJSON so runs can be re-analyzed and re-verified later.
 
-```bash
-pnpm demo &                                   # Broken Shop on :4000 (optional)
-pnpm webdoctor scan http://127.0.0.1:4000 --max-pages 30 --fail-on high
-```
+## Design decisions
 
-Results go to `.webdoctor/`: `webdoctor.db` (SQLite) and `runs/<runId>/` with `report.json`,
-`issues.csv`, `report.html`, `scan.json` (raw snapshots) and WebP screenshots.
-Exit codes: `0` ok, `1` issues at/above `--fail-on`, `2` usage error, `3` partial result.
-Options: `--max-pages --depth --viewport --categories --format --out --timeout --ignore-robots --ci`.
+**Absence of evidence is not a fix.** The obvious implementation marks an issue fixed when the next
+scan no longer reports it. That fails when the scan was smaller, the page timed out or a category was
+off. Here an issue counts as fixed only if the new run really looked where it was: same page, every
+viewport it was seen in, category enabled, external link checks not cut short. Otherwise it is carried
+over as _Not rechecked_, left out of the fix prompt and never counted as fixed. The cost is more states
+in the UI; the benefit is that the numbers can gate a CI build.
 
-## Scan a real site
+**One choke point instead of a URL blocklist.** Checking a URL string is not enough (redirects, DNS
+rebinding, `http://2130706433/`, IPv4 inside IPv6, requests made by the page itself). `packages/netguard`
+therefore sits where connections are made: all resolved addresses must be public, the connection goes to
+the address that was checked (resolve once), redirects are followed hop by hop, and Chromium can only
+talk to a local proxy that applies the same policy, with its own DNS, QUIC and WebRTC side doors
+closed. A host firewall is documented as a second line, because application checks have bugs.
 
-Give the main address only. Pages are found from links **and** from `sitemap.xml` (sitemap indexes are
-expanded; robots.txt is obeyed). External links that fail for a script are re-checked in a real browser
-before they are reported.
+**Verdicts have two axes.** Severity says how bad a problem would be; confidence and verdict
+(`fail` / `unverified` plus a reason such as `rate_limited`, `blocked`, `page_unreachable`) say how sure
+the tool is. This is why a 429 from another site is not reported as a broken link, why an "orphan
+page" is tentative when only part of the site was scanned, and why re-verifying a link-structure issue
+answers "scan again" instead of a false "fixed".
+
+**The scanned site is hostile input to the fix prompt.** The prompt is pasted into a coding agent, so
+page text is only emitted inside fenced blocks or code spans whose delimiters are longer than any
+backtick run in the text, control characters are scrubbed, `<` is escaped in rule prose, and the file
+states that it is data. Findings are one per rule (with the distinct places listed and a size budget),
+which keeps the prompt small for scans with thousands of occurrences.
+
+## Using it
+
+### Scan
 
 ```bash
 pnpm webdoctor scan https://your-site.com --max-pages 100
+pnpm webdoctor scan http://127.0.0.1:4000 --fail-on high --new-only   # CI: fail on regressions only
 ```
 
-or press **New scan** in the inspector (`pnpm webdoctor ui`) and paste the address.
+Give the main address only; pages come from links and the sitemap, and robots.txt is obeyed. Results
+go to `.webdoctor/`: `webdoctor.db`, and `runs/<runId>/` with `report.json` (validated by a zod
+schema), `issues.csv`, `report.html` (screenshots inline), `fix-prompt.md`, raw snapshots and WebP
+screenshots. Exit codes: `0` ok, `1` problems at or above `--fail-on`, `2` usage error, `3` partial
+result. Options: `--max-pages --depth --viewport --categories --format --out --timeout --max-external
+--ignore-robots --ci --new-only --fail-on`. The same scan can be started from **New scan** in the
+inspector.
 
-## History and Regression Radar
-
-Scans of the same site (same origin) form a history. Every new scan is compared with the one before it
-by issue fingerprint:
+### Regression Radar
 
 | What happened                                        | Status                                     |
 | ---------------------------------------------------- | ------------------------------------------ |
 | found now, not before                                | **New**                                    |
 | found before and now                                 | **Open**                                   |
 | found before, gone, and its page was scanned again   | **Fixed**                                  |
-| fixed earlier and found again                        | **Reopened** ("back")                      |
+| fixed earlier and found again                        | **Reopened**                               |
 | known before, but this scan did not look at its page | **Not rechecked** (never counted as fixed) |
 
-"Looked at again" means the same page in every viewport where the problem was seen, the same
-category, and (for external links) link checks that were not cut short. A smaller sample, a page that
-is down, or a different set of categories can therefore never make problems look fixed.
-
 ```bash
-pnpm webdoctor history                         # runs per site with new / fixed / back / not rechecked
-pnpm webdoctor scan <url> --fail-on high --new-only   # CI: fail only on regressions
+pnpm webdoctor history      # runs per site: new / fixed / back / not rechecked
 ```
 
-In the inspector, the run page shows a strip with the changes, a **Changes** tab, a **Not rechecked**
-tab and per-problem history; the runs page draws a trend per site.
-
-## Fix prompt for an AI agent
-
-Every scan writes `fix-prompt.md`: a Markdown task for an AI coding agent listing root causes first,
-then single problems, each with where it is, how to fix it, example code, a "done when" condition and
-the `verify` command. Text copied from the scanned site is fenced and labelled as data, so a hostile
-page cannot talk to your agent.
+### Verify a fix
 
 ```bash
-pnpm webdoctor export > task.md      # newest run (also: --out task.md --max-findings 20)
+pnpm webdoctor verify <issueId>   # exit 0 fixed, 1 still failing, 3 couldn't verify
 ```
 
-In the inspector use **Copy fix prompt** / **Download .md** at the top.
+Outcomes: **Verified fixed**, **Still failing**, **Couldn't verify**. A page that cannot be loaded, or a
+link target that cannot be re-checked, is never reported as fixed. In the inspector, a root-cause group
+re-checks a sample of up to 5 pages.
 
-## Inspect the results
+### Fix prompt for an AI agent
 
 ```bash
-pnpm --filter @webdoctor/web build      # once (and after UI changes)
-pnpm webdoctor ui                       # prints http://127.0.0.1:7777/?token=...
+pnpm webdoctor export > task.md   # newest run; also --out task.md --max-findings 20
 ```
 
-The API listens on `127.0.0.1` only, requires the printed access token and rejects non-loopback
-`Host` headers. Keys: `j`/`k` move through issues, `1`/`2` switch Desktop/Mobile, `/` searches.
-For UI development: `pnpm webdoctor ui --token dev` and `pnpm --filter @webdoctor/web dev`, then open
-`http://localhost:5173/?token=dev`.
+Root causes first, then single problems, each with location, how to fix, example code, a "done when"
+condition and the `verify` command. In the inspector: **Copy fix prompt** / **Download .md**.
 
-## Verify a fix
+### Site map and link structure
 
-In the inspector press **Re-verify** on an issue (or on a root-cause group: it checks up to 5 pages),
-or from the terminal:
+Every scan records which page links to which. The **Site map** lays pages out by clicks from the home
+page, coloured by worst problem, and lists bottlenecks (pages others are reachable only through, found
+with dominators), the most linked and the deepest pages. Rules: `nav.page.orphan` (no link path from the
+home page), `nav.page.deep` (5+ clicks) and `nav.page.dead-end`. Problems on pages that many pages link to
+rank higher ("Why this priority?" shows the factor).
 
-```bash
-pnpm webdoctor verify <issueId>      # exit 0 fixed, 1 still failing, 3 couldn't verify
-```
+### CI
 
-Only the page and rule behind the issue are re-checked (no crawl, no screenshots). Outcomes:
-**Verified fixed**, **Still failing**, **Couldn't verify**. A page that cannot be loaded, or a link
-target that cannot be re-checked, is never reported as fixed. When the original element is gone the
-result is marked less certain. Statuses and results are saved in the run's database.
+`webdoctor scan <url> --ci --fail-on high --new-only` fails a build only on new problems and, in GitHub
+Actions, writes annotations and a job summary (page text is escaped so it cannot inject workflow
+commands). Example workflow: [docs/ci.md](docs/ci.md).
 
-Not built yet: interactive DOM snapshots, page states, Lighthouse (see the roadmap in TZ.md).
-
-## Site map and link structure
-
-Every scan records which page links to which. The inspector's **Site map** (button on a run) lays the
-pages out by clicks from the home page, coloured by their worst problem, and lists bottlenecks (pages
-that others are reachable only through), the most linked pages and the deepest ones. Big sites are
-grouped into sections.
-
-Three rules use it: `nav.page.orphan` (no link path from the home page, e.g. a page that only the
-sitemap knows), `nav.page.deep` (5+ clicks from home) and `nav.page.dead-end` (no links to other
-pages). When not every page was scanned, "nobody links here" cannot be a fact, so those findings are
-reported as _couldn't verify_ instead of as failures. They also cannot be re-verified on one page:
-scan again. Problems on pages that many pages link to rank higher ("Why this priority?" shows the
-factor).
-
-## CI
-
-`webdoctor scan <url> --ci --fail-on high --new-only` fails a build only on **new** problems and, in
-GitHub Actions, writes annotations and a job summary. Example workflow: [docs/ci.md](docs/ci.md).
-
-## Accessibility of the inspector
-
-The inspector audits itself: `apps/cli/test/ui-a11y.e2e.test.ts` runs axe (WCAG 2.0/2.1 A and AA) on
-the runs list, new scan, run workspace and issue details, in light and dark themes and at 375 px, and
-fails on any critical or serious finding. Automated checks cover only part of WCAG; keyboard
-navigation (`j`/`k`, `/`) and focus rings are tested by hand.
-
-Demo video storyboard: [docs/demo-script.md](docs/demo-script.md).
-
-## Public server
-
-`webdoctor serve` runs the same inspector for strangers: anonymous sessions, every visitor sees only
-their own runs, and the scanner **cannot be pointed at private addresses** (loopback, LAN, cloud
-metadata, the Docker network). Limits (20 pages, 5 minutes, one scan at a time per visitor, 24 h
-retention) and the full threat model are in [docs/security.md](docs/security.md).
+### Public server
 
 ```bash
 pnpm --filter @webdoctor/web build
 WEBDOCTOR_SECRET=dev pnpm webdoctor serve --demo --port 8080     # http://127.0.0.1:8080/
 ```
 
-`--demo` also starts Broken Shop and allow-lists exactly its two origins so visitors have something
-to scan. For a VPS: `docker compose up -d --build` behind a TLS proxy, plus an egress firewall as
-a second line of defence ([docs/deploy.md](docs/deploy.md)). Postgres / Redis / S3 scale-out is not
-built; one container with SQLite is the supported setup.
+Anonymous signed sessions; a visitor sees only their own runs (other people's runs answer 404);
+defaults of 20 pages, depth 2, 5 minutes, 250 MB of traffic and one scan at a time per visitor, robots.txt
+always obeyed, runs deleted after 24 h. `--demo` also starts Broken Shop and allow-lists exactly its two
+origins. Docker files, an egress-firewall recipe and the limits table are in
+[docs/deploy.md](docs/deploy.md) and [docs/security.md](docs/security.md).
 
-## Broken Shop
+### Broken Shop
 
 ```bash
 pnpm demo                     # broken mode on http://127.0.0.1:4000 (external 429 site on :4001)
 DEMO_MODE=fixed pnpm demo     # start already fixed
-curl -X POST http://127.0.0.1:4000/__demo/mode/fixed    # switch at runtime
 curl -X POST http://127.0.0.1:4000/__demo/flaky/down    # make /flaky answer 503
+pnpm --filter @webdoctor/demo-site gen:expected         # regenerate expected-issues.json
 ```
 
-The defects the scanner must find (and how fixed mode differs) are listed in
+The defects the scanner must find, and how fixed mode differs, are in
 [`packages/demo-site/expected-issues.json`](packages/demo-site/expected-issues.json), generated from
-`src/expected.ts`:
+`src/expected.ts`.
+
+## Repository layout
+
+TypeScript monorepo (pnpm workspaces): Node 22, Playwright + axe-core, Fastify, React 19 + Vite, SQLite
+(Drizzle), zod, undici, Vitest.
+
+| Path                 | What                                                                               |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| `packages/core`      | Issue model (zod), snapshot types, URL normalization, fingerprints, history, graph |
+| `packages/scanner`   | Playwright crawler: pages x viewports, screenshots (WebP), axe, link checks        |
+| `packages/rules`     | Rules, explanation catalog, merging across viewports, root-cause groups            |
+| `packages/verify`    | Verify Fix: re-check one issue or a group                                          |
+| `packages/runner`    | `runScan`, JSON / CSV / HTML reports, fix prompt, CI summaries, reanalyze          |
+| `packages/storage`   | Drizzle schema + SQLite store, migrations, owners and retention                    |
+| `packages/netguard`  | SSRF guard: IP policy, pinned DNS, guarded fetch, browser proxy                    |
+| `packages/demo-site` | **Broken Shop**: demo site with intentional defects + `expected-issues.json`       |
+| `apps/cli`           | `webdoctor scan / verify / export / history / reanalyze / ui / serve`              |
+| `apps/api`           | Fastify API: local token mode and public session mode, scan queue                  |
+| `apps/web`           | Inspector UI (React, plain CSS tokens)                                             |
+
+## Develop
 
 ```bash
-pnpm --filter @webdoctor/demo-site gen:expected
+pnpm install
+pnpm --filter @webdoctor/scanner exec playwright install chromium   # once
+pnpm check          # format:check + lint + typecheck + all tests (includes full e2e scans, a few minutes)
 ```
+
+For UI work: `pnpm webdoctor ui --token dev` and `pnpm --filter @webdoctor/web dev`, then open
+`http://localhost:5173/?token=dev`. The local API listens on `127.0.0.1` only, requires the token and
+rejects non-loopback `Host` headers.
+
+## Limitations and roadmap
+
+What it does not do yet, stated plainly:
+
+- **Rendered pages only.** No logins, no form submission, no interaction states (open menus, modals).
+  Automated accessibility checks (axe) cover only part of WCAG; this is not a compliance tool.
+- **No performance metrics.** Page weight is flagged, but there are no Lighthouse-style timings.
+- **Guidance, not patches.** Each issue has a fix description, an example and a check; the tool does not
+  modify your code.
+- **Link-structure findings need a complete scan.** On partial scans they are reported as tentative, and
+  they can only be re-checked by scanning again.
+- **Public mode is a single-container setup.** One scan at a time, per-process in-memory rate limits,
+  SQLite, no accounts. Chromium's own sandbox is off unless `WEBDOCTOR_CHROMIUM_SANDBOX=1` (the container
+  is the sandbox). The Dockerfile and compose file are written and the compose file is validated, but the
+  image has not been built or deployed yet, and there is no hosted demo.
+- **Known gap:** scanning an address that does not answer reports "0 pages" instead of a clear error.
+- **Not published to npm;** run it from source.
+
+Roadmap (see [TZ.md](TZ.md)): root causes that understand page templates, page states, a Lighthouse
+module, fix previews for the mechanically fixable subset, then accounts and scheduled monitoring.
+Postgres, a Redis queue and S3 are deliberately deferred; storage and scanning sit behind interfaces so
+they are swaps, not rewrites.
